@@ -1,0 +1,373 @@
+# FinProj plan
+
+Local LLM agents propose trading strategies and write them as code. Plain Python judges them. The deliverable is an honest funnel: how many strategies were generated and how many survived each check, ending with a holdout the model could not have seen. Zero survivors is an acceptable result.
+
+Written 2026-11-16 by Claude Fable 5.2 as a handoff. It records decisions and the reasoning behind them so a later session, with any model, can continue without re-deriving them. If you change a decision, change it here and say why.
+
+## Status
+
+Update this section at the end of every working session.
+
+- [ ] Week 1 (Nov 16–22): data, splits, backtester, 3 hand-written strategies
+- [ ] Week 2 (Nov 23–29): model served, coder agent, sandbox
+- [ ] Week 3 (Nov 30–Dec 6): look-ahead detector and planted-cheat suite
+- [ ] Week 4 (Dec 7–13): hypothesis agent, log, full loop, overnight run
+- [ ] Week 5 (Dec 14–20): validation, deflated Sharpe, open the holdout once
+- [ ] Week 6 (Dec 21–27): README, write-up, bake-off table
+
+Done so far: `download_data.py`, `make_splits.py`, and their tests (4 passing). Data downloaded 2026-11-16 (see below). Discovery split written: 35,006 bars per symbol in `data/splits/discovery/`. Git repo initialised on `main`. Next: Adam's backtester (Week 1 step 4).
+
+Data as downloaded: BTCUSDT and ETHUSDT, 1h, 2019-01-01 to 2024-12-31, 52,549 bars each (52,608 expected). 59 bars are missing in 20 gaps, at identical times in both symbols, so they are exchange outages: 28 in 2019, 17 in 2020, 13 in 2021, 1 in 2023. The longest is 10 hours, ending 2019-05-15 13:00 UTC. That puts 58 missing bars in discovery and 1 in validation. No nulls, no duplicate timestamps, OHLC consistent, 4 zero-volume bars per symbol. All 144 checksums verified; hashes and download times are in `data/manifest.json`.
+
+Week 5 is probably Penn State finals week (check the calendar). The plan accounts for it: the long generation run starts at the end of Week 4 and runs unattended.
+
+## Who writes what
+
+Adam must be able to defend every line in an interview.
+
+| Piece | Who writes it |
+|---|---|
+| Backtester, look-ahead detector, deflated Sharpe | Adam. The assistant explains, lets him attempt, then reviews against the specs and answer keys below. Never hand him the implementation. |
+| Downloader, splits, sandbox wiring, LLM client, LangGraph glue, logging | Assistant may write. Anything touching splits or leakage still gets a test. |
+
+## Decisions that are settled
+
+| Decision | Reason |
+|---|---|
+| The LLM never judges. It proposes ideas and writes code; Python computes every metric. | An LLM has memorised market history, so its opinion of a backtest is contaminated. |
+| Crypto only: BTCUSDT and ETHUSDT, hourly, Binance bulk dumps. | One clean pipeline, no splits or dividends, no delisting problem for these two. Picking more coins that still exist today adds survivorship bias. Add coins only if ahead of schedule, and pick them by a rule that uses pre-2019 information. |
+| Primary model: Gemma 4 12B. Its model card states a training cutoff of January 2025. | The cutoff fixes where the holdout can start. Checked on Google's model card on 2026-11-16. |
+| Only the primary model's strategies go to the holdout. | A bake-off model with a later cutoff would force a shorter holdout for everyone. The bake-off compares pipeline metrics on discovery data only. |
+| The holdout months are not downloaded until the strategies are frozen. | Data that is not on the machine cannot leak. `download_data.py` refuses months from 2025-01 without `--holdout`, and `data/manifest.json` timestamps prove when each file arrived. |
+| Validation runs once, after generation is finished. | If validation numbers exist while agents are running, they will leak into prompts. |
+| Stocks, phone alerts, live trading: not in the six weeks. | See "After Week 6". |
+
+## Splits
+
+| Split | Range (UTC) | Length | Who sees it |
+|---|---|---|---|
+| Discovery | 2019-01-01 to 2022-12-31 | 4 years, about 35,000 bars | Strategy code runs on it; agents see its metrics |
+| Validation | 2023-01-01 to 2024-12-31 | 2 years, about 17,500 bars | Code runs on it once at the end; agents never see anything from it |
+| Embargo | 2025-01-01 to 2025-02-28 | 2 months | Never scored. Covers uncertainty in the model's stated cutoff |
+| Holdout | 2025-03-01 to the last complete month when opened | about 21 months | Not on disk until Week 5; opened once |
+
+Indicators need history to warm up. To score validation, run the strategy on discovery plus validation bars and score only the validation bars. Same for the holdout.
+
+Discovery and validation are both before the model's cutoff. The model knows roughly what happened in them, so nothing measured there is evidence of skill. Only the holdout counts.
+
+If the primary model changes, `LOCKED_FROM` in `download_data.py` and this table must move to the new model's cutoff month.
+
+## Conventions the judge uses
+
+These are fixed. Every test and every agent prompt assumes them.
+
+- **Strategy interface:** `strategy(df) -> pandas Series` of positions, same length and index as `df`. `df` holds one symbol with columns `ts, open, high, low, close, volume, quote_volume, trades`.
+- **Position:** a number in [0, 1]. 0 is flat, 1 is fully long. No shorting, because spot data cannot support an honest short. Values outside the range are clipped; NaN counts as 0.
+- **Timing:** the position at bar `t` may use data up to and including bar `t`'s close. It is entered at that close and earns the return of bar `t+1`.
+- **Returns:** `r[t] = close[t] / close[t-1] - 1`.
+- **Net return:** `net[t] = pos[t-1] * r[t] - fee * |pos[t-1] - pos[t-2]|`, with the position before the first bar equal to 0.
+- **Fee:** 0.001 (10 basis points) per unit of position change. This is Binance's standard spot taker fee; verify it is still current. Survivors are re-run at 0.002 as a sensitivity check.
+- **Annualisation:** 8,760 bars per year. Not 252.
+- **Portfolio:** run the strategy on each symbol separately and average the per-bar net returns.
+- **Gaps:** Binance has outage gaps (59 bars in this data). Leave them; do not forward-fill. The return across a gap is simply the return between the two bars on either side of it.
+
+### Timing Sharpe (the score that gates everything)
+
+A strategy that is always long earns a positive Sharpe whenever crypto goes up. That is market exposure, not skill. The gating score removes it:
+
+`timing[t] = net[t] - mean_pos * r[t]`
+
+where `mean_pos` is the strategy's average position over the scored window. The timing Sharpe is the annualised Sharpe of `timing`. It rewards only *when* the strategy is in the market. An always-long strategy scores exactly zero before fees and slightly negative after its one entry fee. If the series has zero variance, the Sharpe is 0.
+
+Report the plain net Sharpe and buy-and-hold next to it, but gate on timing Sharpe.
+
+## The funnel
+
+| Stage | Passes when | Checked by |
+|---|---|---|
+| 0. Generated | The model returned a hypothesis and parseable Python | `ast.parse` |
+| 1. Static check | Imports only `numpy`, `pandas`, `math`; no `open`, `eval`, `exec`, `__import__`, dunder access; no hard-coded year literal such as `2021` | AST walk plus one regex |
+| 2. Sandbox | Ran inside Docker within the time limit and returned a valid position series | Sandbox runner |
+| 3. Look-ahead | Truncation test passes and two runs give identical output | Adam's detector |
+| 4. Discovery gate | At least 30 position changes and timing Sharpe above 0 on discovery | Backtester |
+| 5. Validation shortlist | Validation timing Sharpe is individually significant (PSR against 0 of at least 0.95); keep at most the top 10 | `run_validation.py` |
+| 6. Holdout | See "Holdout test" | `open_holdout.py` |
+
+Every attempt is logged with the stage where it stopped. The headline result is the count at each stage.
+
+The hard-coded-year check exists because the truncation test cannot catch a strategy that says "go long on 2020-03-13". That strategy uses no future *data*; it uses the model's memory.
+
+### Trial count
+
+`N` for the deflated Sharpe is the number of official-run attempts that produced a backtest (stages 4 and later, including failures at stage 4). Pilot runs before the prompt freeze are flagged `pilot` and are excluded from validation and from `N`. Strategies are correlated, so the true number of independent trials is lower; using the raw count is conservative. Say so in the write-up.
+
+## Decision for Adam: how strict the validation gate is
+
+The old prompt says "correct with the deflated Sharpe ratio using the total trial count". Taken as a hard gate, that almost certainly leaves nothing to test on the holdout. Under the null, with a 2-year validation window, the deflated Sharpe reaches 0.95 only at these annualised Sharpe levels:
+
+| Trials | Best Sharpe expected from pure luck | Sharpe needed to pass |
+|---|---|---|
+| 10 | 1.1 | 2.3 |
+| 100 | 1.8 | 3.0 |
+| 1,000 | 2.3 | 3.5 |
+
+A net timing Sharpe of 3.5 on hourly BTC and ETH after fees is not a realistic expectation.
+
+- **Option A (literal old rule):** gate validation on deflated Sharpe at 0.95. Expect zero survivors and a holdout that is never opened.
+- **Option B (recommended, and what the funnel table above assumes):** validation only builds a shortlist of at most 10. The deflated Sharpe is computed and reported for every shortlisted strategy, which shows how much of the in-sample result is selection luck. The multiple-testing control that the final claim rests on happens at the holdout, which is independent of everything before it.
+
+Option B is statistically valid because the holdout played no part in choosing the shortlist. It also gives the holdout a job. Adam confirms A or B before Week 5; until then assume B.
+
+### Holdout test (pre-registered before opening)
+
+- **Primary:** the equal-weight portfolio of the shortlist has a holdout timing Sharpe with PSR against 0 of at least 0.95. One test, so no correction. With about 21 months this needs an annualised Sharpe of roughly 1.2 to 1.3.
+- **Secondary:** each shortlisted strategy alone, at `0.05 / K` (Bonferroni). With K = 10 that needs roughly 1.9 to 2.0; with K = 5, about 1.75.
+- **Null control:** take each validated strategy's position series and shift it circularly by a random offset. This keeps its turnover and destroys its timing. Run those through stages 5 and 6. If shifted strategies survive as often as real ones, the agents added nothing. About ten lines of code and the strongest sanity check in the project.
+
+Sharpe precision depends on the calendar span of the data, not the number of bars. The standard error of an annualised Sharpe is roughly `1 / sqrt(years)`: about 0.71 for validation and 0.76 for the holdout. Hourly bars do not tighten it. This is why the holdout length matters and why a model with a late cutoff is expensive.
+
+## Leakage channels and what blocks each
+
+| Channel | Blocked by |
+|---|---|
+| Strategy code reads future bars | Look-ahead detector |
+| Judge misaligns positions and returns | Toy example and the alignment property test |
+| Picking the best of many trials | Deflated Sharpe reported; holdout test controls the final claim |
+| Model remembers market history | Holdout after the cutoff; hard-coded-year check |
+| Validation results reach the agents | Validation runs only after generation ends, in a separate script |
+| Adam or a cloud assistant knows the 2025–26 market | Agent prompts stay generic with no market hints; prompts are committed before the official run; no thresholds change after validation is seen; nothing changes after the holdout |
+| Peeking at the holdout | Not on disk; opened by one script that refuses to run twice |
+| Re-running generation after seeing validation | Every official attempt counts in `N`; if validation is ever run twice, the write-up says so |
+| Coin selection | BTC and ETH only; stated as a limitation |
+| Optimistic costs | Re-run survivors at double fees |
+
+## Architecture
+
+```
+hypothesis agent ─► coder agent ─► static check ─► Docker sandbox ─► judge (host) ─► critic agent
+        ▲                                          (strategy + look-ahead test)          │
+        └──────────────────── summary of the attempt log (DuckDB) ◄──────────────────────┘
+```
+
+- **One model, three prompts.** Served by Ollama to start; the code talks to an OpenAI-compatible endpoint so switching to llama.cpp later is a URL change.
+- **Hypothesis and critic return JSON** validated by Pydantic. **The coder returns a fenced Python block**, not JSON. Small models break JSON escaping when code is inside a string.
+- **The sandbox returns positions only.** The host computes all metrics from them. Generated code never touches a metric.
+- **Sandbox command:** `docker run --rm --name <id> --network none --cpus 1 --memory 1g --pids-limit 128 --read-only --tmpfs /tmp` with the strategy file and the discovery Parquet mounted read-only. Killing the `docker` client on timeout does not stop the container; run `timeout 60 python harness.py` inside it, and `docker kill <id>` as a backstop.
+- **Only discovery data is mounted during generation.**
+- **Write each node as a plain function first** and test it without LangGraph. Wire the graph in Week 4.
+- **The DuckDB log is the checkpoint.** On restart the loop reads the log and continues. One writer process only.
+
+### What the hypothesis agent is shown
+
+It cannot read a thousand attempts in a 16k context. Build the summary in code, under about 3,000 tokens:
+
+- attempt counts per family and per failure stage
+- the five best and five worst by discovery timing Sharpe: hypothesis text and metrics, no code
+- the last five attempts with critic notes
+
+Each hypothesis carries a `family` from a fixed list: trend, mean reversion, breakout, volatility, volume, time of day, other. Alternate between "refine attempt X" and "propose something from the least-tried family". Without this the model proposes moving-average crossovers forever. Reject exact duplicates by hashing the position series. Add a correlation check only if near-duplicates are visibly eating the run.
+
+### Attempt log (one DuckDB table, `attempts`)
+
+`id, run_id, pilot, created_at, model, quant, prompt_version, temperature, parent_id, family, hypothesis, code, code_sha, status, error, disc_net_sharpe, disc_timing_sharpe, disc_turnover, disc_max_dd, disc_n_trades, critic_notes, tokens_in, tokens_out, seconds`
+
+`status` is one of: `parse_error, static_reject, crash, timeout, bad_output, lookahead, nondeterministic, too_few_trades, duplicate, ok`.
+
+Validation and holdout results go in separate tables written by `run_validation.py` and `open_holdout.py`. The agent loop never opens them.
+
+## Week by week
+
+### Week 1 (Nov 16–22). Done when the backtester matches a manual calculation on the toy example.
+
+1. `git init`, first commit. Commits are the audit trail for the prompt freeze and the pre-registration.
+2. Run `python download_data.py`. Expect about 52,608 bars per symbol for 2019-01 to 2024-12, minus a few outage gaps. Record the gap count.
+3. `make_splits.py`: writes `data/splits/discovery/` (bars before 2023-01-01) and refuses to run if `data/klines` holds any bar from 2025 on. There is no separate validation file: `run_validation.py` reads `data/klines`, which ends 2024-12-31, and scores bars from `DISCOVERY_END` on. Import the boundary constants from `make_splits.py`; do not retype the dates anywhere.
+4. **Adam:** backtester, per the spec below.
+5. **Adam:** three hand-written strategies through the fixed interface (for example moving-average crossover, RSI mean reversion, volatility breakout) plus buy-and-hold. If any shows a net Sharpe above 3, suspect a bug before believing it.
+
+### Week 2 (Nov 23–29, Thanksgiving). Done when 20 generated strategies run without crashing the pipeline.
+
+A strategy crashing is fine and gets logged. The pipeline crashing is not.
+
+1. Install Ollama, pull Gemma 4 12B at Q5 or Q6. Set the context to 16k explicitly; Ollama's default is much smaller and silently truncates prompts. Check VRAM use and whether the model has a thinking mode to switch off.
+2. LLM client: one function, with a timeout and a retry. Log every call (prompt, response, tokens, seconds) to a DuckDB table `llm_calls`.
+3. Coder agent, fed 20 hand-written plain-English ideas. The hypothesis agent comes in Week 4.
+4. Static check, Docker image (Python 3.12, numpy, pandas, pyarrow), sandbox runner, harness.
+5. Measure: share of attempts that produce valid code, seconds per strategy. Estimate: about one strategy a minute, so 1,000 take roughly 17 hours. Replace the estimate with the measurement.
+
+### Week 3 (Nov 30–Dec 6). Done when the detector catches 100% of planted cheats with no false alarms.
+
+1. **Adam:** look-ahead detector and the planted-cheat suite, per the spec below.
+2. Add the hard-coded-year check to the static stage.
+3. Run the detector inside the sandbox harness.
+4. If ahead: **Adam** writes the deflated Sharpe now. It is pure math with no dependencies on the rest, and doing it early protects finals week.
+
+### Week 4 (Dec 7–13). Done when the loop runs unattended overnight and resumes after being killed.
+
+1. Hypothesis agent and the log summary.
+2. Critic agent (first thing to cut; a deterministic "too few trades, too many parameters" note covers most of it).
+3. LangGraph wiring.
+4. Kill the process mid-run and restart it. It must continue from the log with no duplicate or lost attempts.
+5. Overnight hazards on Windows: sleep and automatic update restarts, a hung Ollama call (needs the timeout), leftover containers.
+6. Freeze: commit the prompts and tag `gen-v1`. Everything before the tag is pilot. Start the official run to 1,000 attempts at the end of the week so it runs through finals.
+
+### Week 5 (Dec 14–20). Done when the funnel numbers are final.
+
+1. **Adam:** deflated Sharpe, per the spec below, if not done.
+2. `run_validation.py`: one run over all stage-4 survivors. Shortlist, with deflated Sharpe reported.
+3. Null control.
+4. Pre-registration: commit `PREREGISTRATION.md` listing the shortlist (code hashes), the holdout window, the primary and secondary tests, and the fee. Tag `prereg-v1`.
+5. `python download_data.py --holdout --end <last complete month>`.
+6. `open_holdout.py`: refuses to run if `results/HOLDOUT_OPENED.json` exists, writes that file first, then scores. One run. Whatever it says is the result.
+
+### Week 6 (Dec 21–27). Done when someone else can rerun it from the README.
+
+1. README: the funnel table first, then method, limitations, and the five commands to reproduce.
+2. Bake-off: about 100 discovery-only attempts per extra model. Compare valid-code rate, look-ahead rejection rate, duplicate rate, speed. No validation, no holdout.
+3. Results page (cut first; a table in the README is enough).
+
+### If short on time, cut in this order
+
+Langfuse, results page, critic agent, vectorbt cross-check, bake-off down to one extra model, target of 1,000 down to 300. Never cut the look-ahead detector, the holdout, the toy test, or the pre-registration.
+
+## Stack notes
+
+- **Python 3.14 is what is installed.** pandas and pyarrow work on it. numba, which vectorbt needs, often lags new Python versions. If vectorbt will not install, cross-check the vectorised backtester against a plain loop version Adam writes himself. That is a better independent check anyway, and it adds no dependency.
+- **Langfuse** self-hosted now needs Postgres, ClickHouse, Redis and object storage. The `llm_calls` table gives tracing from day one. Add Langfuse in Week 4 only if the loop already works, with a two-hour limit.
+- **Docker Desktop on WSL2** reads Windows-mounted folders slowly. The files here are small enough not to matter; if sandbox start-up dominates the run time, move the data into a Docker volume.
+- **Hypothesis (the testing library)** is for the backtester's alignment and fee properties.
+
+## Specs for the three pieces Adam writes
+
+For each: let him attempt it first. Review against the checklist. Use the questions to probe, not to hint. Answer keys are at the bottom of this file.
+
+### Backtester
+
+Input: close prices, positions, fee. Output: the net return series, then metrics (net Sharpe, timing Sharpe, max drawdown, turnover, number of position changes). Follows "Conventions the judge uses" exactly.
+
+Tests it must pass:
+
+1. The toy example in the answer key, to 9 decimal places.
+2. Fee 0 and position always 1 reproduces buy-and-hold exactly.
+3. Position always 0 gives all-zero returns.
+4. Raising the fee never raises final equity.
+5. Alignment property: changing positions from bar `t` onward never changes net returns up to and including bar `t`.
+6. With fee 0, always-long has a timing Sharpe of exactly 0 (the zero-variance rule).
+
+Mistakes to look for:
+
+- `pos[t] * r[t]`: the position earns the return of the bar it was computed from. This is look-ahead inside the judge, and it makes every strategy look brilliant.
+- Fee charged on the position instead of the change in position.
+- No fee on the first entry.
+- Annualising with 252.
+- Max drawdown computed on returns instead of on the equity curve.
+- Division by zero when returns have no variance.
+
+Questions: Why can't the position at bar `t` earn bar `t`'s return? What does a strategy that flips every bar pay per year in fees? Why is always-long not skill?
+
+### Look-ahead detector
+
+Idea: a strategy that uses no future data gives the same positions for bars up to `c` whether or not bars after `c` exist. Run it on the full data and on data cut at `c`, and compare.
+
+Requirements:
+
+- Compare the whole prefix up to the cut, not only the last bar.
+- Several cuts spread over the entire range, early ones included, some random with a logged seed.
+- Run the full data twice; different outputs mean the strategy is non-deterministic, which is its own rejection.
+- The strategy receives a copy, and the original must be unchanged afterwards.
+- NaN equals NaN. Use a tight tolerance; honest rolling and expanding calculations reproduce exactly on a prefix.
+
+Planted cheats it must catch (all of them):
+
+`shift(-1)`; centred rolling window; z-score using the full-sample mean and standard deviation; scaling by the full-sample min and max; threshold at a full-sample quantile; "long while close is below the all-time max of the dataset"; `rank(pct=True)` over the full series; `bfill`; a model fitted on the whole dataset; anything using `df.iloc[-1]`; an exponential average run on the reversed series; a cheat that activates only when `len(df)` exceeds a threshold; a cheat that activates only in the last 10% of bars.
+
+Honest controls it must pass: moving-average crossover, RSI, expanding z-score, rolling volatility filter, hour-of-day rule.
+
+Mistakes to look for:
+
+- Checking only the final bar of each cut.
+- All cuts late in the data. "Long while close is below the dataset max" looks honest for every cut after the max occurs.
+- A loose tolerance that hides small leaks.
+
+Questions: Which cheat does a single late cut miss, and why? What can this test never detect? (A strategy that hard-codes dates from the model's memory.)
+
+### Deflated Sharpe ratio
+
+Source: Bailey and López de Prado, "The Deflated Sharpe Ratio" (2014). The probabilistic Sharpe ratio (PSR) is from their 2012 paper "The Sharpe Ratio Efficient Frontier".
+
+All Sharpe values here are per bar, not annualised.
+
+- `PSR(SR*) = Φ( (SR − SR*) · sqrt(T − 1) / sqrt(1 − skew · SR + (kurt − 1) / 4 · SR²) )`
+- `SR0 = sqrt(V) · ( (1 − γ) · Φ⁻¹(1 − 1/N) + γ · Φ⁻¹(1 − 1/(N·e)) )`
+- `DSR = PSR(SR0)`
+
+`T` is the number of return observations. `skew` and `kurt` are of the strategy's returns, with `kurt` equal to 3 for a normal distribution. `V` is the variance of the per-bar Sharpe across trials. `N` is the trial count. `γ` is 0.5772156649 (Euler–Mascheroni). `Φ` is the standard normal CDF.
+
+Tests it must pass:
+
+1. The reference cases in the answer key.
+2. Decreasing in `N`, increasing in `T`.
+3. `N = 1` returns PSR against 0.
+4. Simulation: generate `N` strategies of pure noise, take the best, compute its DSR. It should exceed 0.95 in only a small share of repetitions (allow up to about 10%).
+
+Mistakes to look for:
+
+- Feeding annualised Sharpe into a per-bar formula.
+- Excess kurtosis (normal = 0) where the formula wants raw kurtosis (normal = 3). `scipy.stats.kurtosis` returns excess by default.
+- `V` in different units from `SR`.
+- `N = 1` makes `Φ⁻¹(0)` minus infinity. Handle it explicitly.
+
+Limitation to state in the write-up: the formula assumes independent returns. Volatility clustering in crypto makes the true uncertainty somewhat larger.
+
+Questions: Why does the bar rise with `N`? Why does it rise with `V`? What would the expected best Sharpe be from 1,000 coin-flip strategies over two years?
+
+## After Week 6
+
+In this order, each only if the one before it happened.
+
+1. **Forward test.** Once a month, download the new month and score the frozen shortlist. This is the "live test" from the original idea, and it is the cleanest evidence available because it is after everyone's knowledge, including Adam's.
+2. **Stocks as a robustness check.** Run frozen survivors unchanged on stock data the agents never saw.
+3. **Phone alerts.** Only if the primary holdout test passed. A scheduled script that posts to a push service (ntfy or similar) when a frozen strategy changes position is a few lines. A holdout pass at 5% is weak evidence and not a reason to risk money.
+
+## Things to verify before relying on them
+
+- The Ollama tag and quant sizes for Gemma 4 12B, and that Q5 with 16k context fits in 12 GB.
+- Training cutoffs of Devstral Small 2 and Qwen3-Coder-30B-A3B (not found in a search on 2026-11-16; check their Hugging Face model cards).
+- How Ollama's OpenAI-compatible endpoint takes a JSON schema for structured output.
+- The "Profit Mirage" numbers. The old prompt says returns fell 50 to 72%. The abstract gives no numbers, and a secondary summary reports Sharpe decay of about 51 to 62%. Read the paper body before quoting a figure in the README or an interview.
+- Binance's current spot taker fee.
+- Penn State's finals dates.
+- Whether Binance spot kline files ever carry a header row. The parser handles both.
+
+## Answer keys
+
+Stop here if you are Adam and have not attempted the piece yet.
+
+### Toy backtest
+
+Close: 100, 110, 99, 108.9. Positions at bars 0, 1, 2: 1, 0, 1. Fee 0.001.
+
+| Bar | Return | Position held | Position change | Net return | Equity |
+|---|---|---|---|---|---|
+| 1 | +0.10 | 1 | 1 | 0.099 | 1.099 |
+| 2 | −0.10 | 0 | 1 | −0.001 | 1.097901 |
+| 3 | +0.10 | 1 | 1 | 0.099 | 1.206593199 |
+
+Total turnover 3. Max drawdown −0.1%. Buy-and-hold ends at 1.089.
+
+### Deflated Sharpe reference cases
+
+| Case | Inputs | Result |
+|---|---|---|
+| 1 | SR 0.1 per bar, T 1000, skew 0, kurt 3, N 100, V 0.001 | SR0 = 0.080025, DSR = 0.7356 |
+| 2 | As case 1 with skew −0.5, kurt 5 | DSR = 0.7301 |
+| 3 | SR 0.1, T 1000, skew 0, kurt 3, N 1 | DSR = PSR(0) = 0.99919 |
+| 4 | Annualised SR 2.0 on 2 years hourly (T 17,520), N 1000, V = 1/T | SR0 annualised = 2.30, DSR = 0.335 |
+
+A simulation of 100 noise strategies with 500 observations gave an average best Sharpe of 0.1119 per bar against 0.1132 from the SR0 formula.
+
+## Sources
+
+- Gemma 4 model card: https://ai.google.dev/gemma/docs/core/model_card_4
+- Binance public data format: https://github.com/binance/binance-public-data/
+- Profit Mirage: https://arxiv.org/abs/2510.07920
