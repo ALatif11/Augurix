@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     created_at TIMESTAMP DEFAULT (now() AT TIME ZONE 'UTC'), role VARCHAR, model VARCHAR,
     prompt VARCHAR, response VARCHAR, tokens_in INTEGER, tokens_out INTEGER, seconds DOUBLE
 );
+CREATE TABLE IF NOT EXISTS lessons (
+    created_at TIMESTAMP DEFAULT (now() AT TIME ZONE 'UTC'), run_id VARCHAR, after_attempt BIGINT, text VARCHAR
+);
 """
 COLUMNS = ["run_id", "pilot", "model", "prompt_version", "parent_id", "tries", "family", "hypothesis",
            "code", "status", "error", "lookahead", "pos_hash", "timing_sharpe", "net_sharpe",
@@ -86,3 +89,18 @@ def query(sql, params=()):
 def count(where="true", params=()):
     rows = query(f"SELECT count(*) AS n FROM attempts WHERE {where}", params)
     return rows[0]["n"] if rows else 0
+
+
+def add_lesson(run_id, after_attempt, text):
+    """Store the reviewer's notes covering attempts up to `after_attempt`."""
+    with connect() as con:
+        con.execute("INSERT INTO lessons (run_id, after_attempt, text) VALUES (?, ?, ?)", [run_id, after_attempt, text])
+
+
+def lessons(run_id, limit=5):
+    """The latest reviewer notes for a run, oldest first ([] if there are none yet)."""
+    try:
+        return query("SELECT created_at, after_attempt, text FROM lessons WHERE run_id = ? "
+                     "ORDER BY after_attempt DESC LIMIT ?", [run_id, limit])[::-1]
+    except duckdb.CatalogException:  # a log created before the lessons table existed
+        return []

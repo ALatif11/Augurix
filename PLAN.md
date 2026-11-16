@@ -28,6 +28,13 @@ Also built on 2026-11-16, ahead of schedule (96 tests passing, 9 of them through
 
 Verified: the sandbox gives the same result as the host for the trend baseline (timing Sharpe 0.6926, 153 trades) in about 1.6 seconds per attempt; the container blocks network, file writes and runaway loops; the graph feeds an error back to the coder and stops after 3 tries.
 
+**Pilot runs so far (2026-11-16), none of which count toward `N` or may be validated:**
+
+- `pilot`: the 20 hand-written ideas. The first pass stalled at idea 8 when one coder reply ran to 16,000 tokens; replies are now capped at 1,500. Finished on the second pass: 28 attempts, all 20 ideas reached a result. This is Week 2's "done".
+- `night1`: the first unattended researcher run, started 07:25 EST for 4.5 hours with prompts `v2-pilot`. Its report is `runs/night1_report.md`. Read it to decide what to fix in the prompts before the official run.
+
+Prompt history: `v0` produced comment monologues of 1,200 tokens on average. `v1` ("no comments") was ignored, because with thinking off the model reasons in comments. `v2` gives it a short PLAN section before the code block, and most replies are now 17 to 26 lines with no comments.
+
 **Model server (decided 2026-11-16): llama.cpp, not Ollama.** Ollama is not installed. `llama-server` was already built in WSL for the Shadow-Fleet project, with `gemma-4-12B-it-Q4_K_M.gguf` (7.7 GB) and `Qwen3-14B-Q4_K_M.gguf` in `~/models`. Start it with:
 
 ```
@@ -223,7 +230,8 @@ Each hypothesis carries a `family` from a fixed list: trend, mean reversion, bre
 As built in `store.py`: `id, created_at, run_id, pilot, model, prompt_version, parent_id, tries, family, hypothesis, code, status, error, lookahead, pos_hash, timing_sharpe, net_sharpe, total_return, max_drawdown, turnover_per_year, trades_per_symbol, mean_position, equity, seconds`
 
 - Every metric in this table is from the discovery period. Nothing else may ever be written to it.
-- `status` is one of: `static_reject, crash, timeout, bad_output, lookahead, too_few_trades, duplicate, ok`. Unparseable model output lands in `static_reject`.
+- `status` is one of: `static_reject, crash, timeout, bad_output, lookahead, no_trades, too_few_trades, duplicate, ok`. Unparseable model output lands in `static_reject`.
+- `no_trades` means the position never changed on any symbol. That is nearly always a coding bug, so it goes back to the coder and does not count toward `N`. `too_few_trades` (1 to 29 changes) is a real but too-quiet strategy and does count.
 - `lookahead` is `pass`, or `skipped` while the detector does not exist.
 - `tries` is 0 for the first attempt at an idea; a retry's `parent_id` points at the attempt it fixes.
 - `equity` is one point a day, for the dashboard.
@@ -253,7 +261,14 @@ As built in `store.py`: `id, created_at, run_id, pilot, model, prompt_version, p
 
 Validation results live in a separate `validation` table and in `results/`. `agents.py` reads only `attempts`, so they cannot reach a prompt; a test checks this.
 
-There is no critic agent. The researcher sees each failure's status and error text in the log summary, which covers most of what a critic would say. Add one only if pilot runs show the researcher repeating the same mistake.
+**Reviewer agent (added 2026-11-16 at Adam's request).** Every 20 attempts (`--review-every`) the model is shown the latest batch of discovery results and writes three short lists: what worked, what failed and why, and what to try next. The text is stored in the `lessons` table and the researcher reads the two most recent notes from then on. This is the project's memory across a long run.
+
+- It does not judge anything. Every gate is still Python. The reviewer only turns numbers the researcher could already see into notes.
+- It sees discovery results only, like the researcher.
+- Its prompt tells it that scores between −0.5 and +0.5 are luck. It will still over-read noise sometimes; that is what validation is for.
+- The researcher cycles through three instructions: explore the least-tried family (shown what that family already tried), refine a better attempt, follow one of the reviewer's next steps.
+
+**Unattended runs.** `python generate.py --run <name> --hours 5` researches until the time is up, then writes `runs/<name>_report.md`. It keeps Windows awake while it runs, waits and retries if the model server or Docker fails (giving up after 10 failures in a row), and resumes from the log if restarted with the same run name. `--report` rewrites the report for a finished run.
 
 Validation and holdout results go in separate tables written by `run_validation.py` and `open_holdout.py`. The agent loop never opens them.
 

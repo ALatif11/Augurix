@@ -38,3 +38,7 @@ def test_propose_validates_json_and_retries_once():
     h = agents.propose("r", llm)
     assert h.family == "trend" and h.parent_id is None and len(seen) == 2
     assert "least-tried family" in seen[0]
+
+
+def test_extract_code_accepts_a_reply_cut_off_before_the_closing_fence():
+    assert agents.extract_code("```python\ndef strategy(df):\n    return df.close\n") == "def strategy(df):\n    return df.close\n"

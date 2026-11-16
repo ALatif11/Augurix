@@ -60,7 +60,17 @@ def state(run=None):
         "locks": {"detector": (ROOT / "lookahead.py").exists(),
                   "holdout_opened": (ROOT / "results" / "HOLDOUT_OPENED.json").exists()},
         "week5": week5(run),
+        "lessons": lessons(run),
     })
+
+
+def lessons(run=None):
+    """The reviewer agent's latest notes: for the chosen run, or for whichever run was reviewed last."""
+    try:
+        run = run or store.query("SELECT run_id FROM lessons ORDER BY created_at DESC LIMIT 1")[0]["run_id"]
+    except (duckdb.CatalogException, IndexError):
+        return []
+    return [{"run_id": run, **note} for note in store.lessons(run, 3)][::-1]
 
 
 def week5(run=None):

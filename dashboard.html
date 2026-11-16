@@ -106,6 +106,11 @@ pre { margin: 8px 0 0; padding: 10px 12px; background: #070b11; border: 1px soli
 pre.err { border-left: 3px solid var(--crit); }
 .idea-text { margin: 6px 0 10px; }
 .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px 22px; }
+.notes h3 { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--glow); margin: 0 0 6px; }
+.notes b { display: block; font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+.notes ul { margin: 4px 0 0; padding-left: 18px; color: var(--ink2); }
+.notes li { margin: 2px 0; }
 .locked-card { display: flex; gap: 14px; align-items: flex-start; }
 .locked-card svg { width: 22px; height: 22px; flex: none; margin-top: 2px; color: var(--muted); }
 .locked-card p { margin: 2px 0 0; color: var(--ink2); max-width: 78ch; }
@@ -149,6 +154,12 @@ pre.err { border-left: 3px solid var(--crit); }
       <p class="sub">Luck alone spreads four-year scores about ±0.5 around zero, so a tall bar near zero is the expected picture.</p>
       <div id="hist"></div>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>What the reviewer agent has recorded</h2>
+    <p class="sub">Every 20 attempts the model reads the latest results and writes notes the researcher agent then works from. They are built from discovery results only: working notes, not findings.</p>
+    <div class="notes" id="lessons"></div>
   </section>
 
   <section class="work">
@@ -425,6 +436,19 @@ function funnel(d) {
   $("funnel").replaceChildren(...out);
 }
 
+function lessons(d) {
+  if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first one comes after 20 attempts."));
+  $("lessons").replaceChildren(...d.lessons.map(note => {
+    const box = h("div", {}, h("h3", {}, `${note.run_id} · after attempt #${note.after_attempt}`));
+    for (const line of note.text.split("\n")) {  // stored as "Worked: a | b" lines
+      const cut = line.indexOf(":");
+      if (cut < 0) continue;
+      box.append(h("b", {}, line.slice(0, cut).trim()), h("ul", {}, ...line.slice(cut + 1).split(" | ").map(item => h("li", {}, item.trim()))));
+    }
+    return box;
+  }));
+}
+
 function hist(d) {
   const xs = d.scores.filter(x => x != null);
   if (!xs.length) return $("hist").replaceChildren(h("div", {class: "empty"}, "No backtested attempts yet."));
@@ -549,7 +573,7 @@ async function refresh() {
     const keep = $("run").value;
     $("run").replaceChildren(h("option", {value: ""}, "All runs"), ...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
     $("run").value = keep;
-    tiles(d); funnel(d); hist(d); table(d);
+    tiles(d); funnel(d); hist(d); table(d); lessons(d);
     stage.points = d.attempts.filter(a => a.timing_sharpe != null && a.trades_per_symbol > 0).map(a => ({
       id: a.id, score: a.timing_sharpe, trades: a.trades_per_symbol, pos: a.mean_position ?? 0, baseline: a.run_id === "baselines",
       family: (a.family || "no family").replace(/_/g, " "), idea: (a.hypothesis || "").slice(0, 140)}));

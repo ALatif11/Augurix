@@ -17,7 +17,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v1-pilot"
+PROMPT_VERSION = "v2-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
@@ -84,8 +84,10 @@ Rules:
 - Deterministic: no randomness.
 - Every position change costs 0.1%, and a strategy that barely trades is discarded.
 
-Reply with one ```python code block holding the complete function and its imports. Code only:
-no comments, no docstring, no explanation before or after. It should rarely need more than 30 lines."""
+Reply in exactly two parts:
+PLAN: at most 5 short lines saying how you will compute the positions. Do your thinking here.
+Then one ```python code block holding the complete function and its imports. Inside the code
+block write no comment lines and no docstring; it should rarely need more than 30 lines."""
 
 RESEARCHER = """You are a quantitative researcher proposing ideas for systematic long/flat strategies
 on hourly bars of liquid cryptocurrencies.
@@ -106,20 +108,35 @@ Reply with JSON only:
 
 
 def extract_code(text):
-    """The Python inside the reply's last fenced block, or the whole reply if it has no fence."""
-    blocks = re.findall(r"```(?:python|py)?[ \t]*\n(.*?)```", text, re.DOTALL)
+    """The Python inside the reply's last fenced block, or the whole reply if it has no fence.
+
+    A reply cut off by the token cap has an opening fence and no closing one; that still counts as a block.
+    """
+    blocks = [b for b in re.findall(r"```(?:python|py)?[ \t]*\n(.*?)(?:```|\Z)", text, re.DOTALL) if b.strip()]
     return (blocks[-1] if blocks else text).strip() + "\n"
 
 
 def write_code(hypothesis, llm=chat, previous_code=None, error=None):
     user = f"Idea: {hypothesis}"
     if previous_code:
-        user += f"\n\nYour previous attempt:\n```python\n{previous_code}```\n\nIt was rejected: {error}\n\nWrite a corrected version."
+        user += (f"\n\nYour previous attempt:\n```python\n{previous_code}```\n\nIt was rejected: {error}\n\n"
+                 "Write a corrected version. If the code above stops in the middle, your reply was too long.")
+    user += "\n\nRemember: a short PLAN first, then the code block with no comment lines in it."
     return extract_code(llm("coder", CODER, user, temperature=0.4))
 
 
+def _line(r):
+    result = (f"timing Sharpe {r['timing_sharpe']:.2f}, {r['trades_per_symbol']:.0f} trades"
+              if r["timing_sharpe"] is not None else f"{r['status']}: {(r['error'] or '')[:100]}")
+    return f"  #{r['id']} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
+
+
 def summary(run_id):
-    """What the researcher is shown: counts, best, worst and latest attempts. Built by code, never by the model."""
+    """What the researcher is shown: counts, best, worst and latest attempts, and the reviewer's lessons.
+
+    The numbers are assembled by code. Only the lessons are model-written, and they
+    were written from these same discovery-period numbers.
+    """
     rows = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol "
                        "FROM attempts WHERE run_id = ? ORDER BY id", [run_id])
     if not rows:
@@ -131,36 +148,86 @@ def summary(run_id):
             counts[r[key] or "none"] = counts.get(r[key] or "none", 0) + 1
         return ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
 
-    def line(r):
-        result = (f"timing Sharpe {r['timing_sharpe']:.2f}, {r['trades_per_symbol']:.0f} trades"
-                  if r["timing_sharpe"] is not None else f"{r['status']}: {(r['error'] or '')[:100]}")
-        return f"  #{r['id']} [{r['family'] or '-'}] {r['hypothesis'][:220]} -> {result}"
-
     scored = sorted((r for r in rows if r["status"] == "ok"), key=lambda r: -r["timing_sharpe"])
     parts = [f"Attempts so far: {len(rows)}.", f"By family: {tally('family')}.", f"By outcome: {tally('status')}."]
     if scored:
-        parts += ["Best:"] + [line(r) for r in scored[:5]]
+        parts += ["Best:"] + [_line(r) for r in scored[:5]]
         if scored[5:]:
-            parts += ["Worst:"] + [line(r) for r in scored[5:][-5:]]
-    parts += ["Most recent:"] + [line(r) for r in rows[-5:]]
+            parts += ["Worst:"] + [_line(r) for r in scored[5:][-5:]]
+    parts += ["Most recent:"] + [_line(r) for r in rows[-5:]]
+    lessons = store.lessons(run_id, 2)
+    if lessons:
+        parts += ["Lessons from earlier reviews of this search (oldest first):"] + [l["text"] for l in lessons]
     return "\n".join(parts)
 
 
 def propose(run_id, llm=chat):
-    """Ask the researcher for the next idea, alternating between exploring and refining."""
-    n = store.count("run_id = ?", [run_id])
+    """Ask the researcher for the next idea, cycling between exploring, refining and following the reviewer."""
+    turn = store.count("run_id = ? AND tries = 0", [run_id])
     tried = {r["family"]: r["n"] for r in store.query(
         "SELECT family, count(*) AS n FROM attempts WHERE run_id = ? GROUP BY family", [run_id])}
-    if n % 2 == 0:
-        ask = f"Propose an idea in the least-tried family: {min(FAMILIES, key=lambda f: tried.get(f, 0))}."
-    else:
+    if turn % 3 == 0:
+        family = min(FAMILIES, key=lambda f: tried.get(f, 0))
+        seen = store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND family = ? AND tries = 0 "
+                           "ORDER BY id DESC LIMIT 12", [run_id, family])
+        ask = f"Propose an idea in the least-tried family: {family}."
+        if seen:
+            ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
+                    + "\n".join(f"  - {s['hypothesis'][:140]}" for s in seen))
+    elif turn % 3 == 1 or not store.lessons(run_id, 1):
         ask = "Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it."
+    else:
+        ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
     user = summary(run_id) + "\n\n" + ask
     for last in (False, True):
         text = llm("researcher", RESEARCHER, user, schema=Hypothesis.model_json_schema())
         try:
             match = re.search(r"\{.*\}", text, re.DOTALL)  # tolerate a fence or stray words around the JSON
             return Hypothesis.model_validate_json(match.group(0) if match else text)
+        except ValidationError:
+            if last:
+                raise
+
+
+class Review(BaseModel):
+    worked: list[str]
+    failed: list[str]
+    next_steps: list[str]
+
+
+REVIEWER = """You are reviewing a batch of results from an automated search for long/flat strategies on
+hourly cryptocurrency bars. A later researcher will read your notes instead of the raw results.
+
+Scores are timing Sharpe on one fixed four-year history: the Sharpe ratio after 0.1% trading costs,
+minus what a constant position of the same average size would have earned. Around zero means no
+skill. Anything between -0.5 and +0.5 cannot be told apart from luck, so do not call a small positive
+number a success. Many strategies were tried, so even the best score is partly luck.
+
+Write three short lists, at most 5 items each, one sentence per item, referring to attempts by #id:
+- worked: what the ideas scoring clearly above +0.5 have in common. If none did, say so.
+- failed: what scored clearly below zero, was rejected or crashed, and the likely reason. Use the
+  error text. Note when heavy trading (many trades) is what sank an idea.
+- next_steps: specific directions not yet tried, or a concrete fix for a promising failure.
+
+Do not mention dates, events or price levels.
+Reply with JSON only: {"worked": [...], "failed": [...], "next_steps": [...]}"""
+
+
+def review(run_id, after_id, llm=chat):
+    """Have the model turn the attempts after `after_id` into lessons. Returns the text to store."""
+    rows = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
+                       "WHERE run_id = ? AND id > ? ORDER BY id DESC LIMIT 40", [run_id, after_id])[::-1]
+    earlier = store.lessons(run_id, 1)
+    user = "Results in this batch:\n" + "\n".join(_line(r) for r in rows)
+    if earlier:
+        user += "\n\nLessons recorded before this batch (keep what still holds, correct what does not):\n" + earlier[0]["text"]
+    for last in (False, True):
+        text = llm("reviewer", REVIEWER, user, schema=Review.model_json_schema(), temperature=0.3)
+        try:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            r = Review.model_validate_json(match.group(0) if match else text)
+            return "\n".join(f"  {label}: " + (" | ".join(s.strip() for s in items[:5]) or "nothing")
+                             for label, items in (("Worked", r.worked), ("Failed", r.failed), ("Next", r.next_steps)))
         except ValidationError:
             if last:
                 raise
