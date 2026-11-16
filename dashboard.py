@@ -22,7 +22,7 @@ import store
 
 ROOT = Path(__file__).parent
 LIST_COLS = ("id, created_at, run_id, pilot, tries, family, hypothesis, status, lookahead, "
-             "timing_sharpe, net_sharpe, trades_per_symbol")
+             "timing_sharpe, net_sharpe, trades_per_symbol, mean_position")
 BACKTESTED = "status IN ('ok', 'too_few_trades', 'duplicate')"
 
 
@@ -42,8 +42,8 @@ def state(run=None):
     funnel = store.query(f"""
         SELECT count(*) AS generated,
                count(*) FILTER (status <> 'static_reject') AS static_ok,
-               count(*) FILTER (status = 'lookahead' OR {BACKTESTED}) AS ran,
-               count(*) FILTER ({BACKTESTED} AND lookahead = 'pass') AS lookahead_ok,
+               count(*) FILTER (status IN ('lookahead', 'no_trades') OR {BACKTESTED}) AS ran,
+               count(*) FILTER ((status = 'no_trades' OR {BACKTESTED}) AND lookahead = 'pass') AS lookahead_ok,
                count(*) FILTER (status = 'ok' AND timing_sharpe > 0 AND lookahead = 'pass') AS gate_checked,
                count(*) FILTER (status = 'ok' AND timing_sharpe > 0) AS gate_all,
                count(*) FILTER (created_at > (now() AT TIME ZONE 'UTC') - INTERVAL 1 HOUR) AS last_hour,
@@ -93,6 +93,17 @@ def benchmark():
             "equity": backtest.equity_curve(closes, [np.ones(len(c)) for c in closes], fee=0)[::24].tolist()}
 
 
+def curves(run=None):
+    """Thinned equity curves of the latest backtested attempts, worst timing Sharpe first, for the 3D terrain."""
+    where, params = ("run_id = ?", [run]) if run else ("true", [])
+    rows = store.query(f"SELECT id, family, timing_sharpe, equity FROM attempts WHERE {where} AND status = 'ok' "
+                       "AND equity IS NOT NULL ORDER BY id DESC LIMIT 200", params)
+    b = benchmark()
+    return clean({"dates": b["dates"][::12], "benchmark": b["equity"][::12],
+                  "curves": [{"id": r["id"], "family": r["family"], "timing": r["timing_sharpe"], "eq": r["equity"][::12]}
+                             for r in sorted(rows, key=lambda r: r["timing_sharpe"])]})
+
+
 def attempt(attempt_id):
     rows = store.query("SELECT * FROM attempts WHERE id = ?", [attempt_id])
     return clean({"attempt": rows[0], "benchmark": benchmark()}) if rows else None
@@ -105,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply((ROOT / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
         if url.path == "/api/state":
             return self.reply_json(state(parse_qs(url.query).get("run", [None])[0]))
+        if url.path == "/api/equity":
+            return self.reply_json(curves(parse_qs(url.query).get("run", [None])[0]))
         if url.path.startswith("/api/attempt/") and url.path.rsplit("/", 1)[1].isdigit():
             found = attempt(int(url.path.rsplit("/", 1)[1]))
             if found:

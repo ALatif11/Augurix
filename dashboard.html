@@ -6,92 +6,115 @@
 <title>FinProj · Strategy discovery</title>
 <style>
 :root {
-  color-scheme: light;
-  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
-  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.04);
-  --s1: #2a78d6; --s2: #eb6834;
+  color-scheme: dark;
+  --page: #05080d; --surface: #0b1118; --ink: #e8eef5; --ink2: #a9b6c6; --muted: #6f7f92;
+  --grid: #18222e; --axis: #2a3848; --border: rgba(120,190,255,.16); --wash: rgba(120,190,255,.06);
+  --s1: #3987e5; --s2: #d95926; --glow: #6cb4ff;
   --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.05);
-    --s1: #3987e5; --s2: #d95926;
-  }
+  --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, monospace;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 16px; }
+body {
+  margin: 0; color: var(--ink); font: 14px/1.45 "Segoe UI Variable Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  background-image:
+    radial-gradient(1100px 520px at 50% -120px, rgba(57,135,229,.16), transparent 70%),
+    linear-gradient(rgba(120,190,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,190,255,.035) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px; background-attachment: fixed;
+}
+main { max-width: 1360px; margin: 0 auto; padding: 18px 16px 48px; display: grid; gap: 16px; }
 header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
-h1 { font-size: 18px; font-weight: 650; margin: 0; flex: 1 1 auto; }
-h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
-.sub { color: var(--ink2); font-size: 12.5px; margin: 0 0 12px; }
-select { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
-.live { color: var(--ink2); font-size: 12.5px; display: flex; align-items: center; gap: 7px; font-variant-numeric: tabular-nums; }
-.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
-.live.off i { background: var(--crit); }
+h1 { font: 600 15px var(--mono); letter-spacing: .14em; text-transform: uppercase; margin: 0; flex: 1 1 auto; }
+h1 b { color: var(--glow); font-weight: 600; }
+h2 { font: 600 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; max-width: 86ch; }
+label { font: 11.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+select, button { font: 12.5px var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; }
+button { cursor: pointer; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+button:hover { border-color: var(--glow); color: var(--ink); }
+button[aria-pressed="true"] { color: var(--ink); border-color: var(--glow); background: rgba(57,135,229,.16); box-shadow: 0 0 14px rgba(57,135,229,.25) inset; }
+:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.live { color: var(--ink2); font: 12px var(--mono); display: flex; align-items: center; gap: 8px; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); }
+.live.off i { background: var(--crit); box-shadow: 0 0 10px var(--crit); }
 @media (prefers-reduced-motion: no-preference) { .live:not(.off) i { animation: pulse 2s infinite; } }
 @keyframes pulse { 50% { opacity: .35; } }
-.caveat { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 6px; background: var(--surface); color: var(--ink2); }
+.caveat { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 4px; background: var(--surface); color: var(--ink2); }
 .caveat b { color: var(--ink); }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+
+.card { position: relative; background: linear-gradient(180deg, rgba(14,21,31,.92), rgba(9,14,21,.92)); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.card::before, .card::after { content: ""; position: absolute; width: 12px; height: 12px; border: solid var(--glow); opacity: .7; pointer-events: none; }
+.card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: 6px; }
+.card::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: 6px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-.tile .k { color: var(--ink2); font-size: 12.5px; }
-.tile .v { font-size: 30px; font-weight: 600; line-height: 1.2; margin: 2px 0; }
+.tile .k { font: 11.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tile .v { font: 600 30px/1.25 var(--mono); margin: 2px 0; text-shadow: 0 0 22px rgba(108,180,255,.45); }
 .tile .n { color: var(--muted); font-size: 12px; }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
 .work { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 980px) { .work { grid-template-columns: 1fr; } }
 
+.stagehead { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 4px; }
+.stagehead h2 { flex: 1 1 auto; margin: 0; }
+.stage { position: relative; height: 500px; margin: 6px -16px 0; touch-action: none; cursor: grab; }
+.stage.dragging { cursor: grabbing; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+@media (max-width: 700px) { .stage { height: 340px; } }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink2); font-size: 12.5px; margin: 8px 0 4px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.legend i.line { width: 14px; height: 2px; border-radius: 0; vertical-align: middle; }
+.legend i.dim { opacity: .45; }
+.legend i.diamond { border-radius: 0; transform: rotate(45deg) scale(.8); }
+
 .funnel { display: grid; grid-template-columns: minmax(90px, max-content) minmax(40px, 1fr) minmax(0, max-content); gap: 9px 12px; align-items: center; }
 .funnel .track { height: 14px; position: relative; }
-.funnel .bar { height: 14px; background: var(--s1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.funnel .bar { height: 14px; background: linear-gradient(90deg, #2b6dbf, var(--s1)); border-radius: 0 4px 4px 0; min-width: 2px; box-shadow: 0 0 12px rgba(57,135,229,.45); }
 .funnel .locked { height: 14px; border: 1px dashed var(--axis); border-radius: 0 4px 4px 0; }
-.funnel .num { font-variant-numeric: tabular-nums; text-align: right; }
+.funnel .num { font: 13px var(--mono); text-align: right; }
 .funnel .num small, .funnel .why { color: var(--muted); font-size: 12px; }
 .funnel .lbl.off { color: var(--muted); }
 
 svg { display: block; width: 100%; height: auto; overflow: visible; }
-svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg text { fill: var(--muted); font: 11px var(--mono); }
 svg .lab { fill: var(--ink2); }
-.legend { display: flex; gap: 16px; color: var(--ink2); font-size: 12.5px; margin: 8px 0 4px; }
-.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; }
 .chart { position: relative; }
-.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.12); font-variant-numeric: tabular-nums; display: none; }
-.tip b { font-weight: 600; }
-.tip span { color: var(--ink2); }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: rgba(8,13,20,.96); border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px; font: 12px/1.5 var(--mono); white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,.5); display: none; max-width: 340px; }
+.tip b { font-weight: 600; color: var(--ink); }
+.tip span { color: var(--muted); }
+.tip .idea { white-space: normal; color: var(--ink2); font-family: inherit; display: block; margin-top: 2px; }
 
 .scroll { max-height: 640px; overflow: auto; margin: 0 -16px -14px; }
-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; }
+th { position: sticky; top: 0; background: #0b1118; text-align: left; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 7px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
 td { padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
+td.n, td.r { font-family: var(--mono); font-size: 13px; }
 th:first-child, td:first-child { padding-left: 16px; }
 th.r, td.r { text-align: right; }
 tbody tr { cursor: pointer; }
 tbody tr:hover { background: var(--wash); }
-tbody tr[aria-selected="true"] { background: var(--wash); box-shadow: inset 3px 0 0 var(--s1); }
-td.idea { color: var(--ink2); max-width: 0; width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tbody tr[aria-selected="true"] { background: rgba(57,135,229,.12); box-shadow: inset 3px 0 0 var(--glow); }
+td.idea { color: var(--ink2); max-width: 0; width: 55%; overflow: hidden; text-overflow: ellipsis; }
 .chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .chip svg { width: 10px; height: 10px; flex: none; }
 .tag { color: var(--muted); font-size: 12px; }
 
 dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px 14px; margin: 12px 0; }
-dt { color: var(--muted); font-size: 12px; }
-dd { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-pre { margin: 8px 0 0; padding: 10px 12px; background: var(--page); border: 1px solid var(--border); border-radius: 6px; overflow: auto; max-height: 340px; font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+dt { font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+dd { margin: 0; font: 600 16px var(--mono); }
+pre { margin: 8px 0 0; padding: 10px 12px; background: #070b11; border: 1px solid var(--border); border-radius: 4px; overflow: auto; max-height: 340px; font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--ink2); }
 pre.err { border-left: 3px solid var(--crit); }
 .idea-text { margin: 6px 0 10px; }
 .empty { color: var(--muted); padding: 24px 0; text-align: center; }
 .locked-card { display: flex; gap: 14px; align-items: flex-start; }
-.locked-card svg { width: 22px; height: 22px; flex: none; margin-top: 2px; }
+.locked-card svg { width: 22px; height: 22px; flex: none; margin-top: 2px; color: var(--muted); }
 .locked-card p { margin: 2px 0 0; color: var(--ink2); max-width: 78ch; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>FinProj · Strategy discovery</h1>
+    <h1>FinProj <b>//</b> Strategy discovery</h1>
     <label>Run <select id="run"><option value="">All runs</option></select></label>
     <div class="live off" id="live"><i></i><span id="stamp">connecting…</span></div>
   </header>
@@ -99,6 +122,21 @@ pre.err { border-left: 3px solid var(--crit); }
   <p class="caveat"><b>In-sample numbers.</b> Everything on this page is measured on the discovery period (2019–2022), which the model has seen. None of it is evidence that a strategy works. Only the holdout counts, and it is still locked.</p>
 
   <section class="tiles" id="tiles"></section>
+
+  <section class="card">
+    <div class="stagehead">
+      <h2 id="stage-title">Strategy space</h2>
+      <button id="mode-space" aria-pressed="true">Strategy space</button>
+      <button id="mode-terrain" aria-pressed="false">Equity terrain</button>
+      <button id="spin" aria-pressed="true" title="Rotate the view automatically">Rotate</button>
+    </div>
+    <p class="sub" id="stage-sub"></p>
+    <div class="stage" id="stage">
+      <canvas id="scene" role="img" aria-label="Three-dimensional view of the backtested attempts. The same data is in the attempts table below."></canvas>
+      <div class="tip" id="tip3d"></div>
+    </div>
+    <div class="legend" id="stage-legend"></div>
+  </section>
 
   <section class="two">
     <div class="card">
@@ -139,7 +177,7 @@ pre.err { border-left: 3px solid var(--crit); }
 <script>
 const $ = id => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
-// All data reaches the page through textContent / setAttribute, never innerHTML: ideas, errors and code are model output.
+// All data reaches the page through textContent / setAttribute / canvas text, never innerHTML: ideas, errors and code are model output.
 function h(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) k === "class" ? e.className = v : e.setAttribute(k, v);
@@ -156,11 +194,13 @@ const minus = t => t.replace("-", "−");  // a real minus sign, not a hyphen
 const fmt = (x, d = 2) => x == null ? "–" : minus(x.toFixed(d));
 const signed = x => x == null ? "–" : (x > 0 ? "+" : "") + minus(x.toFixed(2));
 const pct = x => x == null ? "–" : minus(Math.round(x * 100) + "%");
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const OUTCOME = {
   ok:             ["Backtested",   "good"],
   too_few_trades: ["Too few trades", "warn"],
   duplicate:      ["Duplicate",    "warn"],
+  no_trades:      ["Never traded", "serious"],
   lookahead:      ["Used future data", "serious"],
   static_reject:  ["Rejected code", "serious"],
   bad_output:     ["Bad output",   "crit"],
@@ -181,6 +221,172 @@ function chip(status) {
 
 let selected = null, firstLoad = true;
 
+/* ---------- 3D stage: a small perspective renderer on a 2D canvas, no library ---------- */
+const cv = $("scene"), ctx = cv.getContext("2d"), tip3d = $("tip3d");
+const stage = {mode: "space", yaw: -0.62, pitch: 0.4, w: 0, h: 0, points: [], curves: null, picks: [], hover: null, drag: null, dirty: true,
+               spin: !matchMedia("(prefers-reduced-motion: reduce)").matches};
+const TEXT = {
+  space: ["Strategy space",
+          "Each dot is one backtested attempt. Height is its timing Sharpe; the other two axes are how often it trades and how much of the time it is in the market. The flat sheet is zero skill, and the dashed sheets mark ±0.5, the spread luck alone produces over four years. Dots between them are dimmed because they cannot be told apart from luck. Drag to rotate; select a dot to inspect it."],
+  terrain: ["Equity terrain",
+            "Each ridge is one attempt's growth of 1 unit through 2019–2022, ordered from the lowest timing Sharpe at the front to the highest at the back. The ridges share one shape because that shape is the market itself. What a strategy adds is only the small difference between its ridge and its neighbours."],
+};
+function setMode(mode) {
+  stage.mode = mode; stage.dirty = true; stage.hover = null; tip3d.style.display = "none";
+  stage.pitch = mode === "space" ? 0.4 : 0.58;  // look at the terrain from higher up, so ridges do not hide each other
+  $("mode-space").setAttribute("aria-pressed", mode === "space"); $("mode-terrain").setAttribute("aria-pressed", mode === "terrain");
+  $("stage-title").textContent = TEXT[mode][0]; $("stage-sub").textContent = TEXT[mode][1];
+  const dot = (cls, color, text) => h("span", {}, h("i", {class: cls, style: `background:${color}`}), text);
+  $("stage-legend").replaceChildren(...(mode === "space"
+    ? [dot("", "var(--s1)", "Attempt, outside the luck band"), dot("dim", "var(--s1)", "Attempt, inside the luck band"), dot("diamond", "var(--s2)", "Hand-written baseline")]
+    : [dot("line", "var(--s1)", "Attempts, brighter with higher timing Sharpe"), dot("line", "var(--s2)", "Buy and hold")]));
+}
+function fit() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); stage.w = r.width; stage.h = r.height; stage.dirty = true;
+}
+// World axes: x to the right, y away from the viewer, z up. Everything is drawn inside roughly [-1, 1] on each.
+function P(x, y, z) {
+  const cy = Math.cos(stage.yaw), sy = Math.sin(stage.yaw), cp = Math.cos(stage.pitch), sp = Math.sin(stage.pitch);
+  const X = x * cy - y * sy, Y = x * sy + y * cy;
+  const depth = Y * cp - z * sp, up = Y * sp + z * cp;
+  const k = 3.6 / (3.6 + depth), S = Math.min(stage.w * 0.28, stage.h * 0.31);
+  return {x: stage.w / 2 + X * k * S, y: stage.h * 0.44 - up * k * S, d: depth, k};
+}
+function path(points, close) {
+  ctx.beginPath();
+  points.forEach((p, i) => { const q = P(...p); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+  if (close) ctx.closePath();
+}
+function sheet(z, fill, stroke, dash) {
+  path([[-1, -1, z], [1, -1, z], [1, 1, z], [-1, 1, z]], true);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  ctx.setLineDash(dash || []); ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+}
+function gridLines(z, color, n = 8) {
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  for (let i = 1; i < n; i++) {
+    const t = -1 + 2 * i / n;
+    path([[t, -1, z], [t, 1, z]]); ctx.stroke();
+    path([[-1, t, z], [1, t, z]]); ctx.stroke();
+  }
+}
+function label(text, pos, align = "center", color = css("--muted")) {
+  const q = P(...pos);
+  ctx.font = `11px ${css("--mono")}`; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillStyle = color;
+  ctx.fillText(text, q.x, q.y);
+}
+
+function drawSpace() {
+  const pts = stage.points, FLOOR = -0.85;
+  if (!pts.length) return label("No backtested attempts yet", [0, 0, 0], "center", css("--ink2"));
+  const zmax = Math.max(1.5, ...pts.map(p => Math.abs(p.score)));
+  const Z = v => v / zmax * 0.85;
+  const tmax = Math.max(3.4, ...pts.map(p => Math.log10(p.trades)));
+  const X = t => -1 + 2 * (Math.log10(Math.max(t, 1)) / tmax), Y = m => -1 + 2 * m;
+  sheet(FLOOR, null, css("--axis")); gridLines(FLOOR, css("--grid"));
+  sheet(Z(-0.5), "rgba(57,135,229,.045)", "rgba(108,180,255,.45)", [5, 5]);
+  sheet(0, "rgba(255,255,255,.04)", "rgba(232,238,245,.55)"); gridLines(0, "rgba(232,238,245,.07)");
+  sheet(Z(0.5), "rgba(57,135,229,.045)", "rgba(108,180,255,.45)", [5, 5]);
+  path([[-1, 1, FLOOR], [-1, 1, 0.9]]); ctx.strokeStyle = css("--axis"); ctx.stroke();
+  for (const v of [-0.5, 0, 0.5, 1, -1, 2, -2].filter(v => Math.abs(v) <= zmax))
+    label(v ? signed(v) : "0 · no skill", [-1.06, 1, Z(v)], "right", v ? css("--muted") : css("--ink2"));
+  label("timing Sharpe", [-1.06, 1, 0.98], "right", css("--ink2"));
+  for (const t of [10, 100, 1000].filter(t => Math.log10(t) <= tmax)) label(t.toLocaleString(), [X(t), -1.12, FLOOR]);
+  label("trades per symbol →", [0, -1.3, FLOOR], "center", css("--ink2"));
+  for (const m of [0, 0.5, 1]) label(pct(m), [1.1, Y(m), FLOOR], "left");
+  label("time in market →", [1.34, 0, FLOOR], "left", css("--ink2"));
+
+  const drawn = pts.map(p => ({p, top: P(X(p.trades), Y(p.pos), Z(p.score)), base: P(X(p.trades), Y(p.pos), 0)})).sort((a, b) => b.top.d - a.top.d);
+  for (const {p, top, base} of drawn) {
+    const color = p.baseline ? css("--s2") : css("--s1"), outside = Math.abs(p.score) > 0.5, r = (p.id === stage.hover ? 7 : 5) * top.k;
+    ctx.globalAlpha = outside ? 0.7 : 0.3;
+    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+    ctx.globalAlpha = outside ? 1 : 0.45;
+    ctx.shadowColor = color; ctx.shadowBlur = outside ? 16 : 0; ctx.fillStyle = color;
+    ctx.beginPath();
+    if (p.baseline) { ctx.moveTo(top.x, top.y - r * 1.25); ctx.lineTo(top.x + r * 1.25, top.y); ctx.lineTo(top.x, top.y + r * 1.25); ctx.lineTo(top.x - r * 1.25, top.y); ctx.closePath(); }
+    else ctx.arc(top.x, top.y, r, 0, Math.PI * 2);
+    ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    ctx.strokeStyle = css("--surface"); ctx.lineWidth = 1.5; ctx.stroke();
+    if (p.id === selected) { ctx.beginPath(); ctx.arc(top.x, top.y, r + 5, 0, Math.PI * 2); ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5; ctx.stroke(); }
+    stage.picks.push({x: top.x, y: top.y, id: p.id, lines: [`#${p.id} · ${p.family}`, `timing ${signed(p.score)} · ${Math.round(p.trades)} trades · in market ${pct(p.pos)}`], idea: p.idea});
+  }
+}
+
+function drawTerrain() {
+  const c = stage.curves, BASE = -0.8;
+  if (!c || !c.curves.length) return label("No backtested attempts yet", [0, 0, 0], "center", css("--ink2"));
+  const all = c.curves.flatMap(r => r.eq).concat(c.benchmark).map(Math.log), lo = Math.min(...all), hi = Math.max(...all);
+  const n = c.dates.length, m = c.curves.length;
+  const X = i => -1 + 2 * i / (n - 1), Z = v => BASE + (Math.log(v) - lo) / ((hi - lo) || 1) * 1.6;
+  sheet(BASE, null, css("--axis")); gridLines(BASE, css("--grid"));
+  // Few attempts sit close together like a terrain; many spread over the whole depth.
+  const gap = m > 1 ? Math.min(0.14, 1.75 / (m - 1)) : 0, front = -gap * (m - 1) / 2;
+  const ridges = c.curves.map((r, j) => ({...r, y: front + gap * j, rank: m > 1 ? j / (m - 1) : 1}));
+  ridges.push({id: null, eq: c.benchmark, y: front - Math.max(gap, 0.1) * 1.5, bench: true});
+  ridges.sort((a, b) => P(0, b.y, 0).d - P(0, a.y, 0).d);
+  for (const r of ridges) {
+    const top = r.eq.slice(0, n).map((v, i) => [X(i), r.y, Z(v)]);
+    if (!r.bench) {  // each ridge's wall hides the ones behind it; the reference line stays see-through
+      path(top.concat([[X(top.length - 1), r.y, BASE], [-1, r.y, BASE]]), true);
+      ctx.fillStyle = "rgba(9,14,21,.8)"; ctx.fill();
+    }
+    path(top);
+    const hot = r.id != null && (r.id === selected || r.id === stage.hover);
+    ctx.strokeStyle = hot ? css("--ink") : r.bench ? css("--s2") : css("--s1");
+    ctx.globalAlpha = hot || r.bench ? 1 : 0.3 + 0.7 * r.rank; ctx.lineWidth = hot || r.bench ? 2 : 1.3;
+    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = hot ? 14 : r.bench ? 8 : 0;
+    ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    if (r.bench) { const q = top[top.length - 1]; label("buy & hold", [q[0] + 0.05, q[1], q[2]], "left", css("--ink2")); continue; }
+    for (let i = 0; i < top.length; i += 3) { const q = P(...top[i]); stage.picks.push({x: q.x, y: q.y, id: r.id, lines: [`#${r.id} · ${(r.family || "no family").replace(/_/g, " ")}`, `timing ${signed(r.timing)} · ${c.dates[i]} · ${r.eq[i].toFixed(2)}×`]}); }
+  }
+  // Labels last, so no ridge wall paints over them.
+  c.dates.forEach((d, i) => { if (i && d.slice(0, 4) !== c.dates[i - 1].slice(0, 4)) label(d.slice(0, 4), [X(i), -1.15, BASE]); });
+  for (const v of [1, 2, 5, 10, 20, 50].filter(v => Math.log(v) >= lo && Math.log(v) <= hi)) label(v + "×", [-1.06, 1, Z(v)], "right");
+  label("growth of 1", [-1.06, 1, BASE + 1.72], "right", css("--ink2"));
+}
+
+function draw() {
+  stage.picks = [];
+  ctx.clearRect(0, 0, stage.w, stage.h);
+  stage.mode === "space" ? drawSpace() : drawTerrain();
+  stage.dirty = false;
+}
+function frame() {
+  if (stage.spin && !stage.drag && stage.hover == null) { stage.yaw += 0.0022; stage.dirty = true; }
+  if (stage.dirty && stage.w) draw();
+  requestAnimationFrame(frame);
+}
+const box = $("stage");
+box.onpointerdown = e => { stage.drag = {x: e.clientX, y: e.clientY, yaw: stage.yaw, pitch: stage.pitch, moved: false}; box.setPointerCapture(e.pointerId); box.classList.add("dragging"); };
+box.onpointermove = e => {
+  const r = box.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (stage.drag) {
+    const dx = e.clientX - stage.drag.x, dy = e.clientY - stage.drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) stage.drag.moved = true;
+    stage.yaw = stage.drag.yaw + dx * 0.008; stage.pitch = Math.max(0.06, Math.min(1.25, stage.drag.pitch + dy * 0.006));
+    tip3d.style.display = "none"; stage.dirty = true; return;
+  }
+  let best = null, bd = 16 * 16;
+  for (const p of stage.picks) { const d = (p.x - mx) ** 2 + (p.y - my) ** 2; if (d < bd) { bd = d; best = p; } }
+  if ((best && best.id) !== stage.hover) { stage.hover = best ? best.id : null; stage.dirty = true; }
+  if (!best) { tip3d.style.display = "none"; return; }
+  tip3d.replaceChildren(h("b", {}, best.lines[0]), h("br"), h("span", {}, best.lines[1]), ...(best.idea ? [h("span", {class: "idea"}, best.idea)] : []));
+  tip3d.style.display = "block";
+  tip3d.style.left = Math.max(8, Math.min(r.width - tip3d.offsetWidth - 8, mx > r.width / 2 ? mx - tip3d.offsetWidth - 14 : mx + 14)) + "px";
+  tip3d.style.top = Math.max(8, Math.min(r.height - tip3d.offsetHeight - 8, my - 10)) + "px";
+};
+box.onpointerup = e => { const d = stage.drag; stage.drag = null; box.classList.remove("dragging"); if (d && !d.moved && stage.hover != null) show(stage.hover); };
+box.onpointerleave = () => { if (!stage.drag) { stage.hover = null; tip3d.style.display = "none"; stage.dirty = true; } };
+$("mode-space").onclick = () => setMode("space");
+$("mode-terrain").onclick = () => setMode("terrain");
+$("spin").onclick = () => { stage.spin = !stage.spin; $("spin").setAttribute("aria-pressed", stage.spin); };
+$("spin").setAttribute("aria-pressed", stage.spin);
+new ResizeObserver(fit).observe(cv);
+
+/* ---------- tiles, funnel, histogram, table, detail ---------- */
 function tiles(d) {
   const f = d.funnel || {};
   const n = f.generated || 0, per = f.median_seconds;
@@ -188,7 +394,7 @@ function tiles(d) {
     ["Attempts", n.toLocaleString(), `${f.last_hour || 0} in the last hour`],
     ["Code that ran", n ? pct(f.ran / n) : "–", "of attempts produced positions"],
     ["Best timing Sharpe", f.best == null ? "–" : signed(f.best), "in-sample; the best of many is mostly luck"],
-    ["Time per attempt", per == null ? "–" : per.toFixed(1) + " s", per ? `about ${Math.round(3600 / per).toLocaleString()} an hour, sandbox only` : "median"],
+    ["Sandbox time", per == null ? "–" : per.toFixed(1) + " s", "median per attempt, model time not included"],
   ];
   $("tiles").replaceChildren(...items.map(([k, v, note]) =>
     h("div", {class: "card tile"}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, note))));
@@ -248,9 +454,9 @@ function hist(d) {
 
 function table(d) {
   $("rows").replaceChildren(...d.attempts.map(a => {
-    const tr = h("tr", {"aria-selected": a.id === selected ? "true" : "false", tabindex: 0},
-      h("td", {}, String(a.id), a.tries ? h("span", {class: "tag"}, ` retry ${a.tries}`) : ""),
-      h("td", {}, new Date(a.created_at + "Z").toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})),
+    const tr = h("tr", {"aria-selected": a.id === selected ? "true" : "false", tabindex: 0, "data-id": a.id},
+      h("td", {class: "n"}, String(a.id), a.tries ? h("span", {class: "tag"}, ` retry ${a.tries}`) : ""),
+      h("td", {class: "n"}, new Date(a.created_at + "Z").toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})),
       h("td", {}, (a.family || "–").replace(/_/g, " ")),
       h("td", {class: "idea", title: a.hypothesis || ""}, a.hypothesis || ""),
       h("td", {}, chip(a.status)),
@@ -269,7 +475,7 @@ function equityChart(eq, bench) {
   const b = bench.equity.slice(0, n), all = eq.concat(b);
   const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 0.1;
   const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (hi + pad - v) / (hi - lo + 2 * pad) * (H - T - B);
-  const path = ys => ys.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join("");
+  const line = ys => ys.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join("");
   const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Equity of this strategy against buy-and-hold over the discovery period"});
   const stepY = [0.25, 0.5, 1, 2, 5, 10, 20, 50].find(k => (hi - lo) / k <= 6) || 100;
   for (let v = Math.ceil(lo / stepY) * stepY; v <= hi; v += stepY) {
@@ -279,10 +485,10 @@ function equityChart(eq, bench) {
   bench.dates.slice(0, n).forEach((dt, i) => {
     if (i && dt.slice(0, 4) !== bench.dates[i - 1].slice(0, 4)) g.append(s("text", {x: X(i), y: H - 7, "text-anchor": "middle"}, dt.slice(0, 4)));
   });
-  g.append(s("path", {d: path(b), fill: "none", stroke: "var(--s2)", "stroke-width": 2, "stroke-linejoin": "round"}));
-  g.append(s("path", {d: path(eq), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round"}));
+  g.append(s("path", {d: line(b), fill: "none", stroke: "var(--s2)", "stroke-width": 2, "stroke-linejoin": "round"}));
+  g.append(s("path", {d: line(eq), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round"}));
   let ys = Y(eq[n - 1]), yb = Y(b[n - 1]);
-  if (Math.abs(ys - yb) < 13) { const mid = (ys + yb) / 2; ys = mid + (ys <= yb ? -7 : 7); yb = mid + (ys <= yb ? 7 : -7); }
+  if (Math.abs(ys - yb) < 13) { const mid = (ys + yb) / 2, up = ys <= yb; ys = mid + (up ? -7 : 7); yb = mid + (up ? 7 : -7); }
   g.append(s("text", {x: W - R + 8, y: ys + 4, class: "lab"}, `Strategy ${eq[n - 1].toFixed(2)}×`));
   g.append(s("text", {x: W - R + 8, y: yb + 4, class: "lab"}, `Buy & hold ${b[n - 1].toFixed(2)}×`));
   const cross = s("line", {y1: T, y2: H - B, stroke: "var(--axis)", visibility: "hidden"});
@@ -291,7 +497,7 @@ function equityChart(eq, bench) {
   const hit = s("rect", {x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent"});
   g.append(cross, dotB, dotS, hit);
   const tip = h("div", {class: "tip"});
-  const box = h("div", {class: "chart"}, g, tip);
+  const wrap = h("div", {class: "chart"}, g, tip);
   hit.onpointermove = e => {
     const r = hit.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round((e.clientX - r.left) / r.width * (n - 1))));
     for (const el of [cross, dotS, dotB]) el.setAttribute("visibility", "visible");
@@ -299,20 +505,20 @@ function equityChart(eq, bench) {
     dotS.setAttribute("cx", X(i)); dotS.setAttribute("cy", Y(eq[i]));
     dotB.setAttribute("cx", X(i)); dotB.setAttribute("cy", Y(b[i]));
     tip.replaceChildren(h("b", {}, bench.dates[i] || ""), h("br"), h("span", {}, "Strategy "), `${eq[i].toFixed(2)}×`, h("br"), h("span", {}, "Buy & hold "), `${b[i].toFixed(2)}×`);
-    const br = box.getBoundingClientRect(), left = e.clientX - br.left;
+    const br = wrap.getBoundingClientRect(), left = e.clientX - br.left;
     tip.style.display = "block";
     tip.style.left = (left > br.width / 2 ? left - tip.offsetWidth - 12 : left + 12) + "px";
     tip.style.top = "8px";
   };
   hit.onpointerleave = () => { tip.style.display = "none"; for (const el of [cross, dotS, dotB]) el.setAttribute("visibility", "hidden"); };
   return h("div", {},
-    h("div", {class: "legend"}, h("span", {}, h("i", {style: "background:var(--s1)"}), "This strategy, after fees"), h("span", {}, h("i", {style: "background:var(--s2)"}), "Buy and hold")),
-    box);
+    h("div", {class: "legend"}, h("span", {}, h("i", {class: "line", style: "background:var(--s1)"}), "This strategy, after fees"), h("span", {}, h("i", {class: "line", style: "background:var(--s2)"}), "Buy and hold")),
+    wrap);
 }
 
 async function show(id) {
-  selected = id;
-  for (const tr of $("rows").children) tr.setAttribute("aria-selected", tr.firstChild && tr.firstChild.firstChild && tr.firstChild.firstChild.textContent === String(id) ? "true" : "false");
+  selected = id; stage.dirty = true;
+  for (const tr of $("rows").children) tr.setAttribute("aria-selected", tr.dataset.id === String(id) ? "true" : "false");
   const res = await fetch("/api/attempt/" + id);
   if (!res.ok) return;
   const {attempt: a, benchmark} = await res.json();
@@ -335,14 +541,21 @@ async function show(id) {
   $("detail").replaceChildren(...kids);
 }
 
+let curvesKey = null;
 async function refresh() {
   try {
-    const run = $("run").value;
-    const d = await (await fetch("/api/state" + (run ? "?run=" + encodeURIComponent(run) : ""))).json();
+    const run = $("run").value, q = run ? "?run=" + encodeURIComponent(run) : "";
+    const d = await (await fetch("/api/state" + q)).json();
     const keep = $("run").value;
     $("run").replaceChildren(h("option", {value: ""}, "All runs"), ...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
     $("run").value = keep;
     tiles(d); funnel(d); hist(d); table(d);
+    stage.points = d.attempts.filter(a => a.timing_sharpe != null && a.trades_per_symbol > 0).map(a => ({
+      id: a.id, score: a.timing_sharpe, trades: a.trades_per_symbol, pos: a.mean_position ?? 0, baseline: a.run_id === "baselines",
+      family: (a.family || "no family").replace(/_/g, " "), idea: (a.hypothesis || "").slice(0, 140)}));
+    stage.dirty = true;
+    const key = run + "|" + (d.funnel ? d.funnel.generated : 0);
+    if (key !== curvesKey) { curvesKey = key; stage.curves = await (await fetch("/api/equity" + q)).json(); stage.dirty = true; }
     if (firstLoad && d.attempts.length) {
       firstLoad = false;
       const best = d.attempts.filter(a => a.status === "ok").sort((x, y) => y.timing_sharpe - x.timing_sharpe)[0];
@@ -356,6 +569,7 @@ async function refresh() {
   }
 }
 $("run").onchange = refresh;
+setMode("space"); fit(); requestAnimationFrame(frame);
 refresh();
 setInterval(refresh, 5000);
 </script>

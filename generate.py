@@ -18,7 +18,7 @@ import sandbox
 import store
 
 MAX_TRIES = 3
-FIXABLE = {"static_reject", "crash", "bad_output", "timeout", "lookahead"}
+FIXABLE = {"static_reject", "crash", "bad_output", "timeout", "lookahead", "no_trades"}
 
 
 class State(TypedDict, total=False):

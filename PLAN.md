@@ -28,11 +28,23 @@ Also built on 2026-11-16, ahead of schedule (96 tests passing, 9 of them through
 
 Verified: the sandbox gives the same result as the host for the trend baseline (timing Sharpe 0.6926, 153 trades) in about 1.6 seconds per attempt; the container blocks network, file writes and runaway loops; the graph feeds an error back to the coder and stops after 3 tries.
 
-**Not verified: anything that needs a real model.** No model server is installed. The agent prompts, the JSON-schema request format and the model tag have only been run against a scripted stand-in. Expect to adjust `agents.py` on first contact with the model.
+**Model server (decided 2026-11-16): llama.cpp, not Ollama.** Ollama is not installed. `llama-server` was already built in WSL for the Shadow-Fleet project, with `gemma-4-12B-it-Q4_K_M.gguf` (7.7 GB) and `Qwen3-14B-Q4_K_M.gguf` in `~/models`. Start it with:
+
+```
+wsl -d Ubuntu-24.04 -- bash -lc "~/llama.cpp/build/bin/llama-server -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -c 16384 -np 1 --reasoning-budget 0 --host 127.0.0.1 --port 8080"
+```
+
+- `-c 16384 -np 1`: one 16k context. Without `-np 1` the server may split the context across several slots.
+- `--reasoning-budget 0`: turns the model's thinking off. This build has no `--reasoning off` flag, whatever Shadow-Fleet's notes say.
+- With it loaded the GPU shows 10.3 of 12.2 GB used, about 2 GB of that being the desktop.
+- One GPU tenant at a time: stop it before running Shadow-Fleet's server, which uses the same port.
+- The quant is Q4_K_M, not the Q5 or Q6 first planned. It is what is on disk; record it in the write-up.
+
+**First contact with the real model (one call per agent, 2026-11-16):** the coder returned a valid strategy that passed the static check (246 tokens in 22 seconds, the first call after loading); the researcher returned schema-valid JSON in 2.5 seconds at about 45 tokens a second. The coder lagged its moving average by one extra bar that the idea did not ask for. **Still not verified:** the 20-idea run, retry behaviour with a real model, and anything about throughput beyond those two calls.
 
 Next, in order:
 
-1. Install Ollama, pull Gemma 4 12B, set a 16k context (Week 2 step 1).
+1. Start Docker Desktop and the model server (command above).
 2. `python generate.py --ideas ideas.txt` and watch the dashboard. This is Week 2's "done" test. Fix prompts until most attempts produce code that runs.
 3. Adam reads `backtest.py`, `lookahead.py` and `dsr.py` against their specs until he can explain them.
 4. Week 5 scripts are written and tested on synthetic data only (106 tests passing in total). They have never touched the real validation bars and must not until the official run is frozen. See "Week 5" for the exact sequence.
@@ -185,7 +197,7 @@ hypothesis agent ─► coder agent ─► static check ─► Docker sandbox �
         └──────────────────── summary of the attempt log (DuckDB) ◄──────────────────────┘
 ```
 
-- **One model, three prompts.** Served by Ollama to start; the code talks to an OpenAI-compatible endpoint so switching to llama.cpp later is a URL change.
+- **One model, three prompts.** Served by llama.cpp's `llama-server`; the code talks to an OpenAI-compatible endpoint, so any other server is a URL change.
 - **Hypothesis and critic return JSON** validated by Pydantic. **The coder returns a fenced Python block**, not JSON. Small models break JSON escaping when code is inside a string.
 - **The sandbox returns positions only.** The host computes all metrics from them. Generated code never touches a metric.
 - **Sandbox command** (in `sandbox.py`): `docker run --rm -i --name <id> --network none --cpus 1 --memory 1g --pids-limit 128 --read-only --tmpfs /tmp`, with only the strategy file and `harness.py` mounted read-only. Killing the `docker` client on timeout does not stop the container, so `timeout 60 python /harness.py` runs inside it and `docker kill <id>` is the backstop.
@@ -260,9 +272,17 @@ Validation and holdout results go in separate tables written by `run_validation.
 
 A strategy crashing is fine and gets logged. The pipeline crashing is not.
 
-Steps 2 to 4 are built. What is left is step 1, then running `python generate.py --ideas ideas.txt` (step 3's test) and step 5's measurements. Model settings come from the environment: `LLM_BASE_URL` (default `http://localhost:11434/v1`) and `LLM_MODEL` (default `gemma4:12b`, an unverified tag).
+Steps 2 to 4 are built. What is left is step 1, then running `python generate.py --ideas ideas.txt` (step 3's test) and step 5's measurements. Model settings come from the environment: `LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`) and `LLM_MODEL` (default `gemma-4-12B-it-Q4_K_M`, a label for the log only; the server answers with whatever model it loaded).
 
-1. Install Ollama, pull Gemma 4 12B at Q5 or Q6. Set the context to 16k explicitly; Ollama's default is much smaller and silently truncates prompts. Check VRAM use and whether the model has a thinking mode to switch off.
+How to work through this test:
+
+- Run `python generate.py --ideas ideas.txt` with the dashboard open. Each idea gets up to three tries.
+- Read the failures in the dashboard's attempts table. The error text is what the coder was shown on its retry.
+- If one kind of failure repeats, change the `CODER` prompt in `agents.py`, bump `PROMPT_VERSION`, and rerun under a new run id (`--run pilot2`). An ideas run resumes by run id, so reusing `pilot` would skip everything.
+- When most ideas end in a backtest, move on to the researcher loop: `python generate.py --run pilot3 --n 30`.
+- Everything here is a pilot. None of it counts toward `N`, and none of it may be validated.
+
+1. Done: `llama-server` with Gemma 4 12B Q4_K_M, 16k context, thinking off. See "Status" for the command.
 2. LLM client: one function, with a timeout and a retry. Log every call (prompt, response, tokens, seconds) to a DuckDB table `llm_calls`.
 3. Coder agent, fed 20 hand-written plain-English ideas. The hypothesis agent comes in Week 4.
 4. Static check, Docker image (Python 3.12, numpy, pandas, pyarrow), sandbox runner, harness.
@@ -283,7 +303,7 @@ Steps 1 and 3 are built and tested against a scripted model only: `python genera
 2. Critic agent: cut.
 3. LangGraph wiring.
 4. Kill the process mid-run and restart it. It must continue from the log with no duplicate or lost attempts.
-5. Overnight hazards on Windows: sleep and automatic update restarts, a hung Ollama call (needs the timeout), leftover containers.
+5. Overnight hazards on Windows: sleep and automatic update restarts, a hung model call (needs the timeout), leftover containers.
 6. Freeze: commit the prompts and tag `gen-v1`. Everything before the tag is pilot. Start the official run to 1,000 attempts at the end of the week so it runs through finals.
 
 ### Week 5 (Dec 14–20). Done when the funnel numbers are final.
@@ -440,9 +460,9 @@ In this order, each only if the one before it happened.
 
 ## Things to verify before relying on them
 
-- The Ollama tag and quant sizes for Gemma 4 12B, and that Q5 with 16k context fits in 12 GB.
+- Resolved 2026-11-16: Gemma 4 12B Q4_K_M with a 16k context fits in 12 GB (10.3 GB shown in use).
 - Training cutoffs of Devstral Small 2 and Qwen3-Coder-30B-A3B (not found in a search on 2026-11-16; check their Hugging Face model cards).
-- How Ollama's OpenAI-compatible endpoint takes a JSON schema for structured output.
+- Resolved 2026-11-16: llama-server accepts `response_format` with a JSON schema; the researcher call returned valid JSON.
 - The "Profit Mirage" numbers. The old prompt says returns fell 50 to 72%. The abstract gives no numbers, and a secondary summary reports Sharpe decay of about 51 to 62%. Read the paper body before quoting a figure in the README or an interview.
 - Binance's current spot taker fee.
 - Penn State's finals dates.

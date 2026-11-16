@@ -33,7 +33,9 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 .venv\Scripts\python make_splits.py
 .venv\Scripts\python baselines.py
 docker build -t finproj-sandbox .                      (Docker Desktop must be running)
-.venv\Scripts\python generate.py --ideas ideas.txt     (needs a model server; see PLAN.md)
+wsl -d Ubuntu-24.04 -- bash -lc "~/llama.cpp/build/bin/llama-server -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -c 16384 -np 1 --reasoning-budget 0 --host 127.0.0.1 --port 8080"
+                                                       (the model server; leave it running in its own terminal)
+.venv\Scripts\python generate.py --ideas ideas.txt     (needs Docker and the model server running)
 .venv\Scripts\python dashboard.py                      (http://127.0.0.1:8000)
 ```
 

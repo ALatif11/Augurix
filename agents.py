@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field, ValidationError
 
 import store
 
-BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")  # any OpenAI-compatible server
-MODEL = os.environ.get("LLM_MODEL", "gemma4:12b")
-PROMPT_VERSION = "v0-pilot"
+BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
+MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
+PROMPT_VERSION = "v1-pilot"
+MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
 
@@ -29,7 +30,7 @@ class Hypothesis(BaseModel):
 
 def chat(role, system, user, schema=None, temperature=0.8):
     """One chat completion against the local server. Logs the call and returns the reply text."""
-    body = {"model": MODEL, "temperature": temperature,
+    body = {"model": MODEL, "temperature": temperature, "max_tokens": MAX_TOKENS,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     if schema:
         body["response_format"] = {"type": "json_schema",
@@ -71,6 +72,10 @@ Rules:
   ewm() and shift(n) with n >= 1. Never use shift(-n), centered windows, bfill, or any
   statistic taken over the whole DataFrame (a plain .mean(), .std(), .max(), .min(),
   .quantile() or .rank() on a full column). Code that uses later rows is detected and rejected.
+  rolling(), expanding() and ewm() already stop at the current row, so do not add shift(1) to them.
+- For a rule with separate entry and exit conditions, build a Series that is 1.0 where the entry
+  condition is true, 0.0 where the exit condition is true and NaN elsewhere (numpy.where on the
+  boolean conditions), then .ffill().fillna(0). Index with boolean masks, never with 0/1 integers.
 - Import only numpy, pandas and math. No file access.
 - No calendar years or dates anywhere, including comments. Hour of day and day of week
   taken from df.ts are fine.
@@ -79,7 +84,8 @@ Rules:
 - Deterministic: no randomness.
 - Every position change costs 0.1%, and a strategy that barely trades is discarded.
 
-Reply with one ```python code block holding the complete function and its imports. Nothing else."""
+Reply with one ```python code block holding the complete function and its imports. Code only:
+no comments, no docstring, no explanation before or after. It should rarely need more than 30 lines."""
 
 RESEARCHER = """You are a quantitative researcher proposing ideas for systematic long/flat strategies
 on hourly bars of liquid cryptocurrencies.

@@ -68,7 +68,8 @@ def test_same_positions_twice_is_a_duplicate(frames, packed):
 @pytest.mark.parametrize("body, status", [
     ("    return df.close.rolling(5).mean()[:10]", "bad_output"),
     ("    return df.no_such_column", "crash"),
-    ("    return (df.close * 0).astype(float)", "too_few_trades"),
+    ("    return (df.close * 0).astype(float)", "no_trades"),          # never moves: a bug, sent back to the coder
+    ("    return (df.ts > df.ts.iloc[0]).astype(float)", "too_few_trades"),  # enters once and holds
 ])
 def test_failures_get_the_right_status(frames, packed, body, status):
     row = pipeline.attempt("def strategy(df):\n" + body + "\n", frames, packed, run_id="t", pilot=True)

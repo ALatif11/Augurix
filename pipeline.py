@@ -38,6 +38,11 @@ def judge(code, frames, packed):
     positions = [backtest.clean_positions(np.array(out["positions"][s], dtype=float)) for s in symbols]
     row = backtest.evaluate(closes, positions)
     row["lookahead"] = out["lookahead"] or "skipped"
+    if row["trades_per_symbol"] == 0:
+        # Not a quiet strategy: a strategy that never moves is nearly always a coding bug, so the coder gets it back.
+        return {"status": "no_trades", "lookahead": row["lookahead"],
+                "error": "the strategy never changed position on any symbol: every bar had the same position. "
+                         "The entry condition is never applied; check how the conditions are turned into positions."}
     row["equity"] = backtest.equity_curve(closes, positions)[::24].tolist()  # one point a day, for the dashboard
     row["pos_hash"] = hashlib.sha1((np.round(np.concatenate(positions), 6) + 0.0).tobytes()).hexdigest()
     row["status"] = "too_few_trades" if row["trades_per_symbol"] < MIN_TRADES else "ok"
