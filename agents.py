@@ -17,7 +17,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v2-pilot"
+PROMPT_VERSION = "v3-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
@@ -162,20 +162,23 @@ def summary(run_id):
 
 
 def propose(run_id, llm=chat):
-    """Ask the researcher for the next idea, cycling between exploring, refining and following the reviewer."""
+    """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer."""
     turn = store.count("run_id = ? AND tries = 0", [run_id])
     tried = {r["family"]: r["n"] for r in store.query(
         "SELECT family, count(*) AS n FROM attempts WHERE run_id = ? GROUP BY family", [run_id])}
-    if turn % 3 == 0:
-        family = min(FAMILIES, key=lambda f: tried.get(f, 0))
+    # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
+    # variations of its single best trend strategy, which is hill-climbing on noise.
+    if turn % 2 == 0:
+        family = sorted(FAMILIES, key=lambda f: tried.get(f, 0))[(turn // 2) % 2]  # least-tried, then second least-tried
         seen = store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND family = ? AND tries = 0 "
                            "ORDER BY id DESC LIMIT 12", [run_id, family])
         ask = f"Propose an idea in the least-tried family: {family}."
         if seen:
             ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
                     + "\n".join(f"  - {s['hypothesis'][:140]}" for s in seen))
-    elif turn % 3 == 1 or not store.lessons(run_id, 1):
-        ask = "Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it."
+    elif turn % 4 == 1 or not store.lessons(run_id, 1):
+        ask = ("Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it. "
+               "Do not pick an attempt that the recent list shows has already been refined several times.")
     else:
         ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
     user = summary(run_id) + "\n\n" + ask
