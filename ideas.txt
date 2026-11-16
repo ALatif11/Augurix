@@ -1,0 +1,20 @@
+Long when the close is above its 200-hour simple moving average, otherwise flat.
+Long when the 24-hour exponential moving average is above the 168-hour exponential moving average, otherwise flat.
+Long when the return over the last 72 hours is positive, otherwise flat.
+Long when the close is in the top quarter of its range over the last 336 hours, flat when it falls into the bottom half.
+Enter long when the close makes a new 240-hour high; exit when it makes a new 120-hour low.
+Enter long when the 14-hour RSI falls below 25; exit when it rises above 55.
+Enter long when the close is more than 2 rolling standard deviations below its 48-hour mean; exit when it returns to the mean.
+Enter long after three consecutive down hours; exit after the first up hour.
+Long when the close is below the 24-hour volume-weighted average price by more than 1 percent, flat once it is back above it.
+Hold a position equal to the 30-day median of hourly realised volatility divided by the current 7-day realised volatility, capped at 1, updated once a day.
+Long only when 24-hour realised volatility is below its own 30-day rolling median, otherwise flat.
+Enter long when the hourly range (high minus low) is more than twice its 168-hour average and the bar closed up; hold for 12 hours.
+Long when 24-hour volume is above its 168-hour average and the 24-hour return is positive, otherwise flat.
+Enter long when the number of trades in the last 6 hours is more than twice its 168-hour average and the close is above the 6-hour open; exit after 24 hours.
+Long when on-balance volume is above its own 168-hour moving average, otherwise flat.
+Long only during the 8 hours of the day that had the highest average return over the previous 90 days, re-estimated each day.
+Long from Friday 21:00 UTC to Monday 00:00 UTC, flat otherwise.
+Long when the close is above the 200-hour moving average and the 14-hour RSI is below 40; exit when RSI rises above 60 or the close drops below the average.
+Position equal to the fraction of the last 48 hourly closes that were higher than the close 24 hours before them.
+Long when the 168-hour return is positive and 24-hour realised volatility is below its 168-hour average, otherwise flat.

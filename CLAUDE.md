@@ -14,8 +14,8 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 
 ## Working with Adam
 
-- He writes the look-ahead detector and the deflated Sharpe himself. Explain the concept, let him attempt it, then review against the spec and answer key in PLAN.md. Do not write these for him unless he says so for that piece, and do not show him the answer key before he has tried. Give direct answers when he says he is short on time.
-- The backtester (`backtest.py`) was written by the assistant at his request. He still has to be able to explain every line; quiz him when it comes up.
+- He must be able to defend every line in an interview. The backtester (`backtest.py`), look-ahead detector (`lookahead.py`) and deflated Sharpe (`dsr.py`) were written by the assistant at his request on 2026-11-16, so he has not yet learned them by writing them. Quiz him on them with the questions in PLAN.md's specs, Socratically, until he can explain each one. Give direct answers when he says he is short on time.
+- Do not change those three files casually. They are the judge; any change needs a test and a reason recorded in PLAN.md.
 - Plumbing (downloader, splits, sandbox, LLM client, LangGraph, logging) you may write.
 - Be concise and blunt. Say when he is overbuilding or drifting from the plan. Do not flatter.
 - Simplest thing that works. No new dependency for what a few lines can do.
@@ -30,4 +30,9 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 .venv\Scripts\python download_data.py
 .venv\Scripts\python make_splits.py
 .venv\Scripts\python baselines.py
+docker build -t finproj-sandbox .                      (Docker Desktop must be running)
+.venv\Scripts\python generate.py --ideas ideas.txt     (needs a model server; see PLAN.md)
+.venv\Scripts\python dashboard.py                      (http://127.0.0.1:8000)
 ```
+
+PLAN.md has a "Code map" table saying what each file does and where it runs. `harness.py` runs only inside the container. `lookahead.py` runs there on generated code; on the host it is only ever called on trusted hand-written code (tests, baselines).

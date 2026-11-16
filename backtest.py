@@ -33,6 +33,13 @@ def sharpe(x, periods=BARS_PER_YEAR):
     return 0.0 if sd < 1e-12 else float(x.mean() / sd * np.sqrt(periods))
 
 
+def equity_curve(closes, positions, fee=FEE, start=0):
+    """Compounded value of 1 unit in the equal-weight portfolio, one point per scored bar plus the start."""
+    k = max(start - 1, 0)
+    net = np.mean([bar_returns(c, p, fee)[3][k:] for c, p in zip(closes, positions)], axis=0)
+    return np.concatenate([[1.0], np.cumprod(1 + net)])
+
+
 def evaluate(closes, positions, fee=FEE, start=0):
     """Score one strategy on several symbols as an equal-weight portfolio.
 

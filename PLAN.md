@@ -10,12 +10,32 @@ Update this section at the end of every working session.
 
 - [ ] Week 1 (Nov 16–22): data, splits, backtester, 3 hand-written strategies
 - [ ] Week 2 (Nov 23–29): model served, coder agent, sandbox
-- [ ] Week 3 (Nov 30–Dec 6): look-ahead detector and planted-cheat suite
+- [x] Week 3 (Nov 30–Dec 6): look-ahead detector and planted-cheat suite (done 2026-11-16; Adam still has to learn it)
 - [ ] Week 4 (Dec 7–13): hypothesis agent, log, full loop, overnight run
 - [ ] Week 5 (Dec 14–20): validation, deflated Sharpe, open the holdout once
 - [ ] Week 6 (Dec 21–27): README, write-up, bake-off table
 
-Week 1 is functionally complete as of 2026-11-16: `download_data.py`, `make_splits.py`, `backtest.py`, `baselines.py`, 12 tests passing. Data downloaded (see below). Discovery split written: 35,006 bars per symbol in `data/splits/discovery/`. One thing remains before ticking the box: Adam works the toy example by hand and reads `backtest.py` until he can explain every line. Next: Week 2.
+Week 1 is functionally complete as of 2026-11-16: `download_data.py`, `make_splits.py`, `backtest.py`, `baselines.py`, 12 tests passing. Data downloaded (see below). Discovery split written: 35,006 bars per symbol in `data/splits/discovery/`. One thing remains before ticking the box: Adam works the toy example by hand and reads `backtest.py` until he can explain every line.
+
+Also built on 2026-11-16, ahead of schedule (96 tests passing, 9 of them through the real Docker sandbox):
+
+- Week 3: `lookahead.py` catches all 14 planted cheats and passes all 12 honest strategies, on synthetic data and on the real discovery data. Wired into the sandbox.
+- Week 5 math: `dsr.py` (probabilistic and deflated Sharpe), checked against the answer key and a simulation.
+
+- Week 2 plumbing: static check, sandbox image and runner, harness, attempt log, judging pipeline, LLM client, coder agent, 20 ideas in `ideas.txt`.
+- Week 4 plumbing: researcher (hypothesis) agent, log summary, LangGraph loop with retry, resumable `generate.py`.
+- Live dashboard (`dashboard.py`, `dashboard.html`).
+
+Verified: the sandbox gives the same result as the host for the trend baseline (timing Sharpe 0.6926, 153 trades) in about 1.6 seconds per attempt; the container blocks network, file writes and runaway loops; the graph feeds an error back to the coder and stops after 3 tries.
+
+**Not verified: anything that needs a real model.** No model server is installed. The agent prompts, the JSON-schema request format and the model tag have only been run against a scripted stand-in. Expect to adjust `agents.py` on first contact with the model.
+
+Next, in order:
+
+1. Install Ollama, pull Gemma 4 12B, set a 16k context (Week 2 step 1).
+2. `python generate.py --ideas ideas.txt` and watch the dashboard. This is Week 2's "done" test. Fix prompts until most attempts produce code that runs.
+3. Adam reads `backtest.py`, `lookahead.py` and `dsr.py` against their specs until he can explain them.
+4. Week 5 scripts are not written yet: `run_validation.py`, the null control, `PREREGISTRATION.md`, `open_holdout.py`.
 
 Baselines on discovery (2019–2022, BTC and ETH equal weight, 10 bp fee). In-sample numbers from a period everyone knows; not evidence of anything except that the judge behaves sensibly.
 
@@ -38,8 +58,7 @@ Adam must be able to defend every line in an interview.
 
 | Piece | Who writes it |
 |---|---|
-| Look-ahead detector, deflated Sharpe | Adam. The assistant explains, lets him attempt, then reviews against the specs and answer keys below. Never hand him the implementation unless he says otherwise for that piece. |
-| Backtester, baseline strategies | Written by the assistant on 2026-11-16 because Adam said "You can write the backtester" and asked for the baselines. He still has to be able to explain it line by line; quiz him on it using the questions in the backtester spec. |
+| Backtester, baseline strategies, look-ahead detector, deflated Sharpe | Written by the assistant on 2026-11-16 at Adam's request ("You can write the backtester", then "You write both"), because he was about to lose access to the model that wrote this plan. He still has to be able to explain each one line by line. Quiz him with the questions in the specs below until he can; that is now the open work on these pieces. |
 | Downloader, splits, sandbox wiring, LLM client, LangGraph glue, logging | Assistant may write. Anything touching splits or leakage still gets a test. |
 
 ## Decisions that are settled
@@ -166,8 +185,11 @@ hypothesis agent ─► coder agent ─► static check ─► Docker sandbox �
 - **One model, three prompts.** Served by Ollama to start; the code talks to an OpenAI-compatible endpoint so switching to llama.cpp later is a URL change.
 - **Hypothesis and critic return JSON** validated by Pydantic. **The coder returns a fenced Python block**, not JSON. Small models break JSON escaping when code is inside a string.
 - **The sandbox returns positions only.** The host computes all metrics from them. Generated code never touches a metric.
-- **Sandbox command:** `docker run --rm --name <id> --network none --cpus 1 --memory 1g --pids-limit 128 --read-only --tmpfs /tmp` with the strategy file and the discovery Parquet mounted read-only. Killing the `docker` client on timeout does not stop the container; run `timeout 60 python harness.py` inside it, and `docker kill <id>` as a backstop.
-- **Only discovery data is mounted during generation.**
+- **Sandbox command** (in `sandbox.py`): `docker run --rm -i --name <id> --network none --cpus 1 --memory 1g --pids-limit 128 --read-only --tmpfs /tmp`, with only the strategy file and `harness.py` mounted read-only. Killing the `docker` client on timeout does not stop the container, so `timeout 60 python /harness.py` runs inside it and `docker kill <id>` is the backstop.
+- **No data files exist inside the container.** Bars go in on stdin and positions come back on stdout. A strategy can only see the DataFrame it is handed, which closes the "read the full file from disk to beat the truncation test" loophole. The static check also bans `open` and `read_*`.
+- **Only discovery data is ever sent during generation.**
+- **The image pins pandas 2.2.3 and numpy 1.26.4** on Python 3.12. The model's training ends January 2025, so it writes code for those versions; the same code breaks on pandas 3 and numpy 2. The host runs pandas 3; results match exactly on the baseline.
+- **Docker Desktop must be running** before `generate.py` or the container tests. Its engine can take several minutes to start.
 - **Write each node as a plain function first** and test it without LangGraph. Wire the graph in Week 4.
 - **The DuckDB log is the checkpoint.** On restart the loop reads the log and continues. One writer process only.
 
@@ -183,9 +205,35 @@ Each hypothesis carries a `family` from a fixed list: trend, mean reversion, bre
 
 ### Attempt log (one DuckDB table, `attempts`)
 
-`id, run_id, pilot, created_at, model, quant, prompt_version, temperature, parent_id, family, hypothesis, code, code_sha, status, error, disc_net_sharpe, disc_timing_sharpe, disc_turnover, disc_max_dd, disc_n_trades, critic_notes, tokens_in, tokens_out, seconds`
+As built in `store.py`: `id, created_at, run_id, pilot, model, prompt_version, parent_id, tries, family, hypothesis, code, status, error, lookahead, pos_hash, timing_sharpe, net_sharpe, total_return, max_drawdown, turnover_per_year, trades_per_symbol, mean_position, equity, seconds`
 
-`status` is one of: `parse_error, static_reject, crash, timeout, bad_output, lookahead, nondeterministic, too_few_trades, duplicate, ok`.
+- Every metric in this table is from the discovery period. Nothing else may ever be written to it.
+- `status` is one of: `static_reject, crash, timeout, bad_output, lookahead, too_few_trades, duplicate, ok`. Unparseable model output lands in `static_reject`.
+- `lookahead` is `pass`, or `skipped` while the detector does not exist.
+- `tries` is 0 for the first attempt at an idea; a retry's `parent_id` points at the attempt it fixes.
+- `equity` is one point a day, for the dashboard.
+- Every model call (prompt, reply, tokens, seconds) is in a second table, `llm_calls`.
+- The file is `runs/attempts.duckdb`, git-ignored. Export the official run to Parquet and commit that at the end.
+- DuckDB allows one writer or several readers at a time, not both. `store.py` opens the file per call and retries, which is what lets the dashboard read while the generator writes. Ceiling: fine at one write a minute; if runs ever write many times a second, switch the log to SQLite in WAL mode.
+
+### Code map
+
+| File | Role | Runs where |
+|---|---|---|
+| `download_data.py`, `make_splits.py` | Data in, discovery split out | Host, by hand |
+| `backtest.py` | The judge | Host |
+| `baselines.py` | Hand-written reference strategies | Host |
+| `static_check.py` | AST and year-literal filter | Host |
+| `sandbox.py` | Starts the container, pipes data | Host |
+| `harness.py` | Loads and runs the strategy, calls the look-ahead detector | Container only |
+| `lookahead.py` | **Adam's.** `check_lookahead(strategy, df) -> (ok, reason)` | Container only |
+| `pipeline.py` | static check, sandbox, judge, log; one call per attempt | Host |
+| `store.py` | Attempt log | Host |
+| `agents.py` | LLM client, coder and researcher prompts, log summary | Host |
+| `generate.py` | LangGraph loop and command line | Host |
+| `dashboard.py`, `dashboard.html` | Live read-only view of the log | Host, localhost only |
+
+There is no critic agent. The researcher sees each failure's status and error text in the log summary, which covers most of what a critic would say. Add one only if pilot runs show the researcher repeating the same mistake.
 
 Validation and holdout results go in separate tables written by `run_validation.py` and `open_holdout.py`. The agent loop never opens them.
 
@@ -204,6 +252,8 @@ Validation and holdout results go in separate tables written by `run_validation.
 
 A strategy crashing is fine and gets logged. The pipeline crashing is not.
 
+Steps 2 to 4 are built. What is left is step 1, then running `python generate.py --ideas ideas.txt` (step 3's test) and step 5's measurements. Model settings come from the environment: `LLM_BASE_URL` (default `http://localhost:11434/v1`) and `LLM_MODEL` (default `gemma4:12b`, an unverified tag).
+
 1. Install Ollama, pull Gemma 4 12B at Q5 or Q6. Set the context to 16k explicitly; Ollama's default is much smaller and silently truncates prompts. Check VRAM use and whether the model has a thinking mode to switch off.
 2. LLM client: one function, with a timeout and a retry. Log every call (prompt, response, tokens, seconds) to a DuckDB table `llm_calls`.
 3. Coder agent, fed 20 hand-written plain-English ideas. The hypothesis agent comes in Week 4.
@@ -219,8 +269,10 @@ A strategy crashing is fine and gets logged. The pipeline crashing is not.
 
 ### Week 4 (Dec 7–13). Done when the loop runs unattended overnight and resumes after being killed.
 
+Steps 1 and 3 are built and tested against a scripted model only: `python generate.py --run pilot2 --n 50`. Step 2 was cut (see "Code map"). The real work left this week is prompt tuning on pilot runs, then steps 4 to 6. Bump `PROMPT_VERSION` in `agents.py` on every prompt change.
+
 1. Hypothesis agent and the log summary.
-2. Critic agent (first thing to cut; a deterministic "too few trades, too many parameters" note covers most of it).
+2. Critic agent: cut.
 3. LangGraph wiring.
 4. Kill the process mid-run and restart it. It must continue from the log with no duplicate or lost attempts.
 5. Overnight hazards on Windows: sleep and automatic update restarts, a hung Ollama call (needs the timeout), leftover containers.
@@ -229,7 +281,7 @@ A strategy crashing is fine and gets logged. The pipeline crashing is not.
 ### Week 5 (Dec 14–20). Done when the funnel numbers are final.
 
 1. **Adam:** deflated Sharpe, per the spec below, if not done.
-2. `run_validation.py`: one run over all stage-4 survivors. Shortlist, with deflated Sharpe reported.
+2. `run_validation.py`: one run over all stage-4 survivors. Shortlist, with deflated Sharpe reported (`dsr.py`; convert annualised numbers to per-bar first). The sandbox re-runs the look-ahead detector on the longer discovery-plus-validation data. A strategy that fails there is rejected even though it passed on discovery: a full-sample statistic can look honest on one dataset and leak on a longer one.
 3. Null control.
 4. Pre-registration: commit `PREREGISTRATION.md` listing the shortlist (code hashes), the holdout window, the primary and secondary tests, and the fee. Tag `prereg-v1`.
 5. `python download_data.py --holdout --end <last complete month>`.
@@ -250,11 +302,13 @@ Langfuse, results page, critic agent, vectorbt cross-check, bake-off down to one
 - **Python 3.14 is what is installed.** pandas and pyarrow work on it. numba, which vectorbt needs, often lags new Python versions. If vectorbt will not install, cross-check the vectorised backtester against a plain loop version Adam writes himself. That is a better independent check anyway, and it adds no dependency.
 - **Langfuse** self-hosted now needs Postgres, ClickHouse, Redis and object storage. The `llm_calls` table gives tracing from day one. Add Langfuse in Week 4 only if the loop already works, with a two-hour limit.
 - **Docker Desktop on WSL2** reads Windows-mounted folders slowly. The files here are small enough not to matter; if sandbox start-up dominates the run time, move the data into a Docker volume.
-- **Hypothesis (the testing library)** is for the backtester's alignment and fee properties.
+- **Hypothesis (the testing library)** was planned for the backtester's properties; seeded random cases do that job, so it is not installed.
+- **Dashboard:** `python dashboard.py`, then http://127.0.0.1:8000. Standard-library HTTP server and one HTML file, no build step, polls every 5 seconds. It shows discovery results only, labels them in-sample, and keeps validation, holdout and the forward test locked. It must never fetch current prices before the holdout is opened: those are holdout data. Move to FastAPI and React only if it needs more than three read-only routes.
+- **No OpenAI client library and no Pydantic-only dependency:** the LLM call is one `urllib` POST; Pydantic arrives with LangGraph and validates the researcher's JSON.
 
 ## Specs for the three pieces Adam writes
 
-For each: let him attempt it first. Review against the checklist. Use the questions to probe, not to hint. Answer keys are at the bottom of this file.
+All three are now implemented by the assistant (see "Who writes what"). These specs are the review checklists and the source of quiz questions. Use the questions to probe, not to hint. Answer keys are at the bottom of this file.
 
 ### Backtester
 
@@ -286,6 +340,12 @@ Questions: Why can't the position at bar `t` earn bar `t`'s return? What does a 
 
 Idea: a strategy that uses no future data gives the same positions for bars up to `c` whether or not bars after `c` exist. Run it on the full data and on data cut at `c`, and compare.
 
+Implemented in `lookahead.py`; tests in `tests/test_lookahead.py`. It uses 20 cuts: seven fixed fractions from 2% to 85%, the last bar, and 12 seeded random ones. It costs about 0.04 seconds on 35,000 bars for a vectorised strategy.
+
+Measured detection: on the real BTC and ETH discovery data, 14 of 14 cheats caught and 12 of 12 honest strategies passed. On 30 random datasets per cheat, 13 cheats were caught 30 of 30 times. The exception is "long while below the dataset's all-time high", caught 24 of 30. The six misses are datasets where the high falls inside the first 2% of bars, before the earliest cut. In those cases the leak changes at most the positions before that high, so its effect on the score is negligible, but the write-up should state the limit: **a leak confined to bars before the first cut, or to a stretch no cut lands in, is not seen.**
+
+Interface the rest of the system expects: a file `lookahead.py` in the project root with `check_lookahead(strategy, df) -> (ok, reason)`, where `strategy` is the function, `df` is one symbol's bars, `ok` is a bool and `reason` is a short string for the log. It may import only numpy and pandas, because it runs inside the container. Once the file exists, `sandbox.py` mounts it and `harness.py` calls it for every symbol; a failure is logged with status `lookahead` and the reason is fed back to the coder.
+
 Requirements:
 
 - Compare the whole prefix up to the cut, not only the last bar.
@@ -311,6 +371,8 @@ Questions: Which cheat does a single late cut miss, and why? What can this test 
 ### Deflated Sharpe ratio
 
 Source: Bailey and López de Prado, "The Deflated Sharpe Ratio" (2014). The probabilistic Sharpe ratio (PSR) is from their 2012 paper "The Sharpe Ratio Efficient Frontier".
+
+Implemented in `dsr.py` (`psr`, `expected_max_sharpe`, `deflated_sharpe`, `sharpe_stats`); tests in `tests/test_dsr.py`. In the simulation test, the best of 50 pure-noise strategies looks significant under a plain test more than 85% of the time and under the deflated Sharpe less than 10% of the time.
 
 All Sharpe values here are per bar, not annualised.
 
@@ -358,7 +420,7 @@ In this order, each only if the one before it happened.
 
 ## Answer keys
 
-Stop here if you are Adam and have not attempted the piece yet.
+These are the numbers the tests check against. Working the toy backtest by hand is still the fastest way to understand the backtester.
 
 ### Toy backtest
 

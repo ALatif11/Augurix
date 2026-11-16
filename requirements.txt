@@ -1,3 +1,6 @@
 pandas
 pyarrow
+duckdb
+langgraph
+pydantic
 pytest

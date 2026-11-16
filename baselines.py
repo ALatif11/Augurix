@@ -6,8 +6,6 @@ never sent to validation or the holdout.
 
     python baselines.py     # prints discovery-period metrics
 """
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
@@ -59,7 +57,28 @@ def vol_managed(df):
 
 BASELINES = [buy_and_hold, sma_trend, rsi_reversion, vol_managed]
 
+FAMILY = {"buy_and_hold": "other", "sma_trend": "trend", "rsi_reversion": "mean_reversion", "vol_managed": "volatility"}
+
 if __name__ == "__main__":
-    dfs = [pd.read_parquet(p) for p in sorted(Path("data/splits/discovery").glob("*.parquet"))]
-    rows = {f.__name__: backtest.evaluate([d.close for d in dfs], [f(d) for d in dfs]) for f in BASELINES}
+    import inspect
+
+    import lookahead
+    import pipeline
+    import store
+
+    frames = pipeline.load_discovery()
+    closes = [d.close.to_numpy() for d in frames.values()]
+    log = store.count("run_id = 'baselines'") == 0  # put them in the attempt log once, as a reference run
+    rows = {}
+    for f in BASELINES:
+        # Trusted hand-written code, so it runs on the host; generated code never does.
+        pos = [backtest.clean_positions(f(d)) for d in frames.values()]
+        rows[f.__name__] = m = backtest.evaluate(closes, pos)
+        if log:
+            store.add({**m, "run_id": "baselines", "pilot": True, "tries": 0, "family": FAMILY[f.__name__],
+                       "hypothesis": (inspect.getdoc(f) or "Always fully long.").split("\n\n")[0].replace("\n", " "),
+                       "code": inspect.getsource(f), "seconds": 0.0,
+                       "lookahead": "pass" if all(lookahead.check_lookahead(f, d)[0] for d in frames.values()) else "fail",
+                       "status": "ok" if m["trades_per_symbol"] >= pipeline.MIN_TRADES else "too_few_trades",
+                       "equity": backtest.equity_curve(closes, pos)[::24].tolist()})
     print(pd.DataFrame(rows).T.round(3).to_string())
