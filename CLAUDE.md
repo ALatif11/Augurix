@@ -14,7 +14,8 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 
 ## Working with Adam
 
-- He writes the backtester, the look-ahead detector, and the deflated Sharpe himself. Explain the concept, let him attempt it, then review against the spec and answer key in PLAN.md. Do not write these for him, and do not show him the answer key before he has tried. Give direct answers when he says he is short on time.
+- He writes the look-ahead detector and the deflated Sharpe himself. Explain the concept, let him attempt it, then review against the spec and answer key in PLAN.md. Do not write these for him unless he says so for that piece, and do not show him the answer key before he has tried. Give direct answers when he says he is short on time.
+- The backtester (`backtest.py`) was written by the assistant at his request. He still has to be able to explain every line; quiz him when it comes up.
 - Plumbing (downloader, splits, sandbox, LLM client, LangGraph, logging) you may write.
 - Be concise and blunt. Say when he is overbuilding or drifting from the plan. Do not flatter.
 - Simplest thing that works. No new dependency for what a few lines can do.
@@ -28,4 +29,5 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 .venv\Scripts\python -m pytest -q
 .venv\Scripts\python download_data.py
 .venv\Scripts\python make_splits.py
+.venv\Scripts\python baselines.py
 ```

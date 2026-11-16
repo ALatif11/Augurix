@@ -15,7 +15,18 @@ Update this section at the end of every working session.
 - [ ] Week 5 (Dec 14–20): validation, deflated Sharpe, open the holdout once
 - [ ] Week 6 (Dec 21–27): README, write-up, bake-off table
 
-Done so far: `download_data.py`, `make_splits.py`, and their tests (4 passing). Data downloaded 2026-11-16 (see below). Discovery split written: 35,006 bars per symbol in `data/splits/discovery/`. Git repo initialised on `main`. Next: Adam's backtester (Week 1 step 4).
+Week 1 is functionally complete as of 2026-11-16: `download_data.py`, `make_splits.py`, `backtest.py`, `baselines.py`, 12 tests passing. Data downloaded (see below). Discovery split written: 35,006 bars per symbol in `data/splits/discovery/`. One thing remains before ticking the box: Adam works the toy example by hand and reads `backtest.py` until he can explain every line. Next: Week 2.
+
+Baselines on discovery (2019–2022, BTC and ETH equal weight, 10 bp fee). In-sample numbers from a period everyone knows; not evidence of anything except that the judge behaves sensibly.
+
+| Strategy | Timing Sharpe | Net Sharpe | Total return | Max drawdown | Trades per symbol | Mean position |
+|---|---|---|---|---|---|---|
+| Buy and hold | −0.50 (artifact, see "Timing Sharpe") | 1.02 | +623% | −78% | 1 | 1.00 |
+| Price above 20-day average | 0.69 | 1.34 | +812% | −52% | 153 | 0.52 |
+| Hourly RSI reversion | −0.48 | −0.09 | −39% | −64% | 489 | 0.17 |
+| Volatility-managed | −0.45 | 0.91 | +311% | −78% | 841 | 0.78 |
+
+The trend baseline's 0.69 is about 1.4 standard errors from zero over four years, so it is not significant even before any correction. The baselines are pilots: not counted in `N`, never sent to validation or the holdout.
 
 Data as downloaded: BTCUSDT and ETHUSDT, 1h, 2019-01-01 to 2024-12-31, 52,549 bars each (52,608 expected). 59 bars are missing in 20 gaps, at identical times in both symbols, so they are exchange outages: 28 in 2019, 17 in 2020, 13 in 2021, 1 in 2023. The longest is 10 hours, ending 2019-05-15 13:00 UTC. That puts 58 missing bars in discovery and 1 in validation. No nulls, no duplicate timestamps, OHLC consistent, 4 zero-volume bars per symbol. All 144 checksums verified; hashes and download times are in `data/manifest.json`.
 
@@ -27,7 +38,8 @@ Adam must be able to defend every line in an interview.
 
 | Piece | Who writes it |
 |---|---|
-| Backtester, look-ahead detector, deflated Sharpe | Adam. The assistant explains, lets him attempt, then reviews against the specs and answer keys below. Never hand him the implementation. |
+| Look-ahead detector, deflated Sharpe | Adam. The assistant explains, lets him attempt, then reviews against the specs and answer keys below. Never hand him the implementation unless he says otherwise for that piece. |
+| Backtester, baseline strategies | Written by the assistant on 2026-11-16 because Adam said "You can write the backtester" and asked for the baselines. He still has to be able to explain it line by line; quiz him on it using the questions in the backtester spec. |
 | Downloader, splits, sandbox wiring, LLM client, LangGraph glue, logging | Assistant may write. Anything touching splits or leakage still gets a test. |
 
 ## Decisions that are settled
@@ -77,7 +89,9 @@ A strategy that is always long earns a positive Sharpe whenever crypto goes up. 
 
 `timing[t] = net[t] - mean_pos * r[t]`
 
-where `mean_pos` is the strategy's average position over the scored window. The timing Sharpe is the annualised Sharpe of `timing`. It rewards only *when* the strategy is in the market. An always-long strategy scores exactly zero before fees and slightly negative after its one entry fee. If the series has zero variance, the Sharpe is 0.
+where `mean_pos` is the strategy's average position over the scored window. The timing Sharpe is the annualised Sharpe of `timing`. It rewards only *when* the strategy is in the market. An always-long strategy scores exactly zero before fees. If the series has zero variance, the Sharpe is 0.
+
+Known artifact: with fees, buy-and-hold's timing series is one entry fee followed by zeros, and the Sharpe formula turns that into −0.50 over four years (it is `−sqrt(8760 / bars)`). The number is meaningless. It does not affect the gate, which only asks for a value above 0.
 
 Report the plain net Sharpe and buy-and-hold next to it, but gate on timing Sharpe.
 
@@ -182,8 +196,9 @@ Validation and holdout results go in separate tables written by `run_validation.
 1. `git init`, first commit. Commits are the audit trail for the prompt freeze and the pre-registration.
 2. Run `python download_data.py`. Expect about 52,608 bars per symbol for 2019-01 to 2024-12, minus a few outage gaps. Record the gap count.
 3. `make_splits.py`: writes `data/splits/discovery/` (bars before 2023-01-01) and refuses to run if `data/klines` holds any bar from 2025 on. There is no separate validation file: `run_validation.py` reads `data/klines`, which ends 2024-12-31, and scores bars from `DISCOVERY_END` on. Import the boundary constants from `make_splits.py`; do not retype the dates anywhere.
-4. **Adam:** backtester, per the spec below.
-5. **Adam:** three hand-written strategies through the fixed interface (for example moving-average crossover, RSI mean reversion, volatility breakout) plus buy-and-hold. If any shows a net Sharpe above 3, suspect a bug before believing it.
+4. Backtester: done, in `backtest.py`. `evaluate()` scores a strategy across symbols and takes a `start` index so validation and the holdout can be scored on top of warm-up history.
+5. Baselines: done, in `baselines.py`. One per family, each with textbook parameters from its source and no tuning: price above its 20-day average (Detzel et al. 2021), hourly RSI(14) reversion (Wilder's 30/50 levels), volatility-managed exposure (Moreira and Muir 2017). Do not adjust their parameters after seeing results.
+6. **Adam:** work the toy example by hand, then read `backtest.py` against it.
 
 ### Week 2 (Nov 23–29, Thanksgiving). Done when 20 generated strategies run without crashing the pipeline.
 
@@ -242,6 +257,8 @@ Langfuse, results page, critic agent, vectorbt cross-check, bake-off down to one
 For each: let him attempt it first. Review against the checklist. Use the questions to probe, not to hint. Answer keys are at the bottom of this file.
 
 ### Backtester
+
+Implemented in `backtest.py` by the assistant; this spec is now the review checklist and the source of quiz questions. All six tests below exist in `tests/test_backtest.py`, plus a comparison against an independent bar-by-bar loop, which replaces the vectorbt cross-check. The property tests use seeded random cases, not the Hypothesis library; add it only if a real need appears.
 
 Input: close prices, positions, fee. Output: the net return series, then metrics (net Sharpe, timing Sharpe, max drawdown, turnover, number of position changes). Follows "Conventions the judge uses" exactly.
 
