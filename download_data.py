@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import io
 import json
+import subprocess
 import urllib.error
 import urllib.request
 import zipfile
@@ -27,10 +28,14 @@ LOCKED_FROM = "2025-01"
 DATA = Path("data")
 
 
-def check_unlocked(months, holdout):
+def check_unlocked(months, holdout, cwd="."):
     if not holdout and any(m >= LOCKED_FROM for m in months):
         raise SystemExit(f"Months from {LOCKED_FROM} on are the locked holdout. "
                          "Pass --holdout only when opening it (PLAN.md, Week 5).")
+    if holdout and not subprocess.run(["git", "tag", "--list", "prereg-v1"], cwd=cwd,
+                                      capture_output=True, text=True).stdout.strip():
+        raise SystemExit("The holdout cannot be downloaded before the test is pre-registered: "
+                         "commit PREREGISTRATION.md and run `git tag prereg-v1` first.")
 
 
 def parse_klines(zip_bytes):

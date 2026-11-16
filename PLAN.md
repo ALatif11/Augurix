@@ -35,7 +35,7 @@ Next, in order:
 1. Install Ollama, pull Gemma 4 12B, set a 16k context (Week 2 step 1).
 2. `python generate.py --ideas ideas.txt` and watch the dashboard. This is Week 2's "done" test. Fix prompts until most attempts produce code that runs.
 3. Adam reads `backtest.py`, `lookahead.py` and `dsr.py` against their specs until he can explain them.
-4. Week 5 scripts are not written yet: `run_validation.py`, the null control, `PREREGISTRATION.md`, `open_holdout.py`.
+4. Week 5 scripts are written and tested on synthetic data only (106 tests passing in total). They have never touched the real validation bars and must not until the official run is frozen. See "Week 5" for the exact sequence.
 
 Baselines on discovery (2019–2022, BTC and ETH equal weight, 10 bp fee). In-sample numbers from a period everyone knows; not evidence of anything except that the judge behaves sensibly.
 
@@ -155,7 +155,10 @@ Option B is statistically valid because the holdout played no part in choosing t
 
 - **Primary:** the equal-weight portfolio of the shortlist has a holdout timing Sharpe with PSR against 0 of at least 0.95. One test, so no correction. With about 21 months this needs an annualised Sharpe of roughly 1.2 to 1.3.
 - **Secondary:** each shortlisted strategy alone, at `0.05 / K` (Bonferroni). With K = 10 that needs roughly 1.9 to 2.0; with K = 5, about 1.75.
-- **Null control:** take each validated strategy's position series and shift it circularly by a random offset. This keeps its turnover and destroys its timing. Run those through stages 5 and 6. If shifted strategies survive as often as real ones, the agents added nothing. About ten lines of code and the strongest sanity check in the project.
+- **Null control:** take a strategy's position series and rotate it in time by a random amount. This keeps its turnover and time in the market and destroys its timing. As built:
+  - At validation, every validated strategy gets 100 shifted copies. The summary reports the share of real strategies that are individually significant next to the share of shifted copies that are (about 5% by construction). If the two are close, the agents added nothing.
+  - At the holdout, the shortlist portfolio gets 1,000 shifted versions, giving a permutation p-value for the primary result.
+  - Both are reported, not gates. Limit: a strategy that repeats on the calendar, such as an hour-of-day rule, is unchanged by a shift of whole days, so 1 copy in 24 keeps its full edge and neighbours keep most of it. For those strategies the null is conservative. In a test with a real planted hour-of-day edge the PSR test passed while the permutation p-value was only 0.10.
 
 Sharpe precision depends on the calendar span of the data, not the number of bars. The standard error of an annualised Sharpe is roughly `1 / sqrt(years)`: about 0.71 for validation and 0.76 for the holdout. Hourly bars do not tighten it. This is why the holdout length matters and why a model with a late cutoff is expensive.
 
@@ -232,6 +235,11 @@ As built in `store.py`: `id, created_at, run_id, pilot, model, prompt_version, p
 | `agents.py` | LLM client, coder and researcher prompts, log summary | Host |
 | `generate.py` | LangGraph loop and command line | Host |
 | `dashboard.py`, `dashboard.html` | Live read-only view of the log | Host, localhost only |
+| `dsr.py` | Probabilistic and deflated Sharpe | Host |
+| `run_validation.py` | Validation scoring, null control, shortlist, writes `PREREGISTRATION.md` | Host, once |
+| `open_holdout.py` | Registration checks, then the holdout test | Host, once ever |
+
+Validation results live in a separate `validation` table and in `results/`. `agents.py` reads only `attempts`, so they cannot reach a prompt; a test checks this.
 
 There is no critic agent. The researcher sees each failure's status and error text in the log summary, which covers most of what a critic would say. Add one only if pilot runs show the researcher repeating the same mistake.
 
@@ -279,6 +287,28 @@ Steps 1 and 3 are built and tested against a scripted model only: `python genera
 6. Freeze: commit the prompts and tag `gen-v1`. Everything before the tag is pilot. Start the official run to 1,000 attempts at the end of the week so it runs through finals.
 
 ### Week 5 (Dec 14–20). Done when the funnel numbers are final.
+
+The scripts are built. The whole week is this sequence, run once, in order, after `generate.py --run gen-v1 --official` has finished and nothing more will be generated:
+
+```
+python run_validation.py --run gen-v1        # scores validation, runs the null, writes PREREGISTRATION.md
+(read PREREGISTRATION.md)
+git add PREREGISTRATION.md results/ && git commit -m "Pre-register the holdout test" && git tag prereg-v1
+python download_data.py --holdout --end <last complete month>
+python open_holdout.py --run gen-v1          # once, ever
+```
+
+Locks that enforce the order:
+
+- `run_validation.py` refuses a pilot run, and refuses a second pass unless `--rerun` is given; passes are numbered and a second one has to be reported.
+- `download_data.py --holdout` refuses until the tag `prereg-v1` exists.
+- `open_holdout.py` refuses unless `PREREGISTRATION.md` and the judge files (`backtest.py`, `dsr.py`, `lookahead.py`, `harness.py`, `sandbox.py`, `static_check.py`, `run_validation.py`, `open_holdout.py`, `make_splits.py`, `Dockerfile`) are unchanged since the tag, and every shortlisted strategy's code still matches its registered SHA-256.
+- It writes `results/HOLDOUT_OPENED.json` before computing anything and refuses forever after.
+- An empty shortlist means the holdout is never opened and the result is zero survivors.
+
+`--option A` on `run_validation.py` selects the strict deflated-Sharpe gate; the default is B. Adam still has to confirm the choice before running it. Do not run it both ways and pick.
+
+The original step list, for reference:
 
 1. **Adam:** deflated Sharpe, per the spec below, if not done.
 2. `run_validation.py`: one run over all stage-4 survivors. Shortlist, with deflated Sharpe reported (`dsr.py`; convert annualised numbers to per-bar first). The sandbox re-runs the look-ahead detector on the longer discovery-plus-validation data. A strategy that fails there is rejected even though it passed on discovery: a full-sample statistic can look honest on one dataset and leak on a longer one.

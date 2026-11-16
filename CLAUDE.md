@@ -9,6 +9,8 @@ Local LLM agents propose trading strategies and write them as code; plain Python
 - The LLM never judges results. Python computes every metric.
 - Agents see discovery metrics only. Nothing from validation or the holdout ever enters a prompt.
 - Holdout months (2025-01 onward) are not downloaded until Week 5. Do not pass `--holdout` to `download_data.py`, and do not fetch that data any other way, before `PREREGISTRATION.md` is committed and tagged.
+- `run_validation.py` runs once, on the official run, after generation is frozen. Never run it on a pilot run or to "see how things look".
+- `open_holdout.py` runs once, ever. Never delete `results/HOLDOUT_OPENED.json`, move the `prereg-v1` tag, or edit a judge file after that tag to get it to run.
 - Generated strategy code runs only inside the Docker sandbox, never on the host.
 - Never present a backtest from before the model's cutoff as evidence of skill.
 
@@ -34,5 +36,7 @@ docker build -t finproj-sandbox .                      (Docker Desktop must be r
 .venv\Scripts\python generate.py --ideas ideas.txt     (needs a model server; see PLAN.md)
 .venv\Scripts\python dashboard.py                      (http://127.0.0.1:8000)
 ```
+
+Week 5 commands (`run_validation.py`, `download_data.py --holdout`, `open_holdout.py`) are deliberately not listed here. Their order and their locks are in PLAN.md under "Week 5". Do not run any of them to test something; the tests use synthetic data.
 
 PLAN.md has a "Code map" table saying what each file does and where it runs. `harness.py` runs only inside the container. `lookahead.py` runs there on generated code; on the host it is only ever called on trusted hand-written code (tests, baselines).

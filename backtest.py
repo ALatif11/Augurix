@@ -33,32 +33,39 @@ def sharpe(x, periods=BARS_PER_YEAR):
     return 0.0 if sd < 1e-12 else float(x.mean() / sd * np.sqrt(periods))
 
 
-def equity_curve(closes, positions, fee=FEE, start=0):
-    """Compounded value of 1 unit in the equal-weight portfolio, one point per scored bar plus the start."""
-    k = max(start - 1, 0)
-    net = np.mean([bar_returns(c, p, fee)[3][k:] for c, p in zip(closes, positions)], axis=0)
-    return np.concatenate([[1.0], np.cumprod(1 + net)])
-
-
-def evaluate(closes, positions, fee=FEE, start=0):
-    """Score one strategy on several symbols as an equal-weight portfolio.
+def portfolio_returns(closes, positions, fee=FEE, start=0):
+    """Per-bar (net, timing) returns of the equal-weight portfolio over the scored bars.
 
     closes, positions: one array per symbol, all the same length.
     start: index of the first scored bar. Earlier bars are indicator warm-up
     (used when scoring validation or the holdout on top of older history).
     """
     k = max(start - 1, 0)  # net[i] belongs to bar i+1
-    nets, timings, turnover, trades, mean_pos = [], [], [], [], []
+    nets, timings = [], []
     for close, pos in zip(closes, positions):
-        r, held, change, net = (a[k:] for a in bar_returns(close, pos, fee))
+        r, held, _, net = (a[k:] for a in bar_returns(close, pos, fee))
         nets.append(net)
         # Subtract what a constant position of the same average size earned, so
         # the score rewards only *when* the strategy was in the market.
         timings.append(net - held.mean() * r)
+    return np.mean(nets, axis=0), np.mean(timings, axis=0)
+
+
+def equity_curve(closes, positions, fee=FEE, start=0):
+    """Compounded value of 1 unit in the equal-weight portfolio, one point per scored bar plus the start."""
+    return np.concatenate([[1.0], np.cumprod(1 + portfolio_returns(closes, positions, fee, start)[0])])
+
+
+def evaluate(closes, positions, fee=FEE, start=0):
+    """Score one strategy on several symbols as an equal-weight portfolio. Arguments as portfolio_returns."""
+    net, timing = portfolio_returns(closes, positions, fee, start)
+    k = max(start - 1, 0)
+    turnover, trades, mean_pos = [], [], []
+    for close, pos in zip(closes, positions):
+        _, held, change, _ = (a[k:] for a in bar_returns(close, pos, fee))
         turnover.append(change.sum())
         trades.append(np.count_nonzero(change > 1e-12))
         mean_pos.append(held.mean())
-    net, timing = np.mean(nets, axis=0), np.mean(timings, axis=0)
     equity = np.concatenate([[1.0], np.cumprod(1 + net)])
     years = len(net) / BARS_PER_YEAR
     return {

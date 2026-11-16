@@ -195,15 +195,16 @@ function tiles(d) {
 }
 
 function funnel(d) {
-  const f = d.funnel || {}, n = f.generated || 0, det = d.locks.detector;
+  const f = d.funnel || {}, n = f.generated || 0, det = d.locks.detector, w = d.week5;
   const stages = [
     ["Generated", f.generated],
     ["Passed static check", f.static_ok],
     ["Ran in the sandbox", f.ran],
     ["Passed look-ahead test", det ? f.lookahead_ok : null, "not checked: detector not built yet"],
     ["Passed discovery gate", det ? f.gate_checked : f.gate_all, "", det ? "" : "look-ahead unchecked"],
-    ["Validation shortlist", null, "locked until generation is frozen"],
-    ["Survived holdout", null, d.locks.holdout_opened ? "opened: see results/" : "locked: data not downloaded"],
+    ["Validation shortlist", w.shortlisted, "locked until generation is frozen"],
+    ["Survived holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened: see results/" : "locked: data not downloaded",
+     w.holdout ? `primary test ${w.holdout.primary_passed ? "passed" : "failed"}` : ""],
   ];
   const out = [];
   for (const [label, count, why, note] of stages) {

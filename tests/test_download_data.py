@@ -1,4 +1,5 @@
 import io
+import subprocess
 import zipfile
 
 import pandas as pd
@@ -33,4 +34,15 @@ def test_locked_months_refused_without_flag():
     with pytest.raises(SystemExit):
         dd.check_unlocked(["2024-12", "2025-01"], holdout=False)
     dd.check_unlocked(["2024-12"], holdout=False)
-    dd.check_unlocked(["2025-01"], holdout=True)
+
+
+def test_holdout_download_needs_the_preregistration_tag(tmp_path):
+    def git(*args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    with pytest.raises(SystemExit, match="pre-registered"):
+        dd.check_unlocked(["2025-03"], holdout=True, cwd=tmp_path)
+    (tmp_path / "PREREGISTRATION.md").write_text("x")
+    git("add", "-A"), git("commit", "-qm", "prereg"), git("tag", "prereg-v1")
+    dd.check_unlocked(["2025-03"], holdout=True, cwd=tmp_path)

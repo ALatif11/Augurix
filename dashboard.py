@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import duckdb
 import numpy as np
 
 import backtest
@@ -58,7 +59,25 @@ def state(run=None):
         "attempts": store.query(f"SELECT {LIST_COLS} FROM attempts WHERE {where} ORDER BY id DESC LIMIT 300", params),
         "locks": {"detector": (ROOT / "lookahead.py").exists(),
                   "holdout_opened": (ROOT / "results" / "HOLDOUT_OPENED.json").exists()},
+        "week5": week5(run),
     })
+
+
+def week5(run=None):
+    """Shortlist size and holdout outcome. Both stay None until run_validation.py and open_holdout.py have run."""
+    out = {"shortlisted": None, "holdout": None}
+    try:
+        rows = store.query("SELECT count(*) FILTER (shortlisted) AS n, count(*) AS total FROM validation "
+                           "WHERE (run_id = ? OR ? IS NULL) AND pass_no = (SELECT max(pass_no) FROM validation)", [run, run])
+        if rows and rows[0]["total"]:
+            out["shortlisted"] = rows[0]["n"]
+    except duckdb.CatalogException:  # validation has never been run
+        pass
+    files = sorted((ROOT / "results").glob(f"holdout_{run or '*'}.json"))
+    if files:
+        r = json.loads(files[-1].read_text())
+        out["holdout"] = {"survivors": r["survivors"], "primary_passed": r["primary"]["passed"]}
+    return out
 
 
 @functools.cache

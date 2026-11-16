@@ -12,6 +12,7 @@ import pandas as pd
 
 DISCOVERY_END = pd.Timestamp("2023-01-01", tz="UTC")   # exclusive; validation starts here
 VALIDATION_END = pd.Timestamp("2025-01-01", tz="UTC")  # exclusive; embargo and holdout start here
+HOLDOUT_START = pd.Timestamp("2025-03-01", tz="UTC")   # first scored holdout bar; Jan-Feb 2025 is the embargo
 DATA = Path("data")
 
 
