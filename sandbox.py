@@ -27,8 +27,11 @@ def pack(frames):
     return buf.getvalue()
 
 
-def run(code, packed, timeout=60):
-    """Return the harness result dict: positions, or {"error": kind, "detail": text}."""
+def run(code, packed, timeout=60, detector=True):
+    """Return the harness result dict: positions, or {"error": kind, "detail": text}.
+
+    detector=False skips the look-ahead test, for re-running code that was already judged (the dashboard replay).
+    """
     name = f"finproj-{uuid.uuid4().hex[:12]}"
     with tempfile.TemporaryDirectory() as job:
         Path(job, "strategy.py").write_text(code, encoding="utf-8")
@@ -36,7 +39,7 @@ def run(code, packed, timeout=60):
                "--cpus", "1", "--memory", "1g", "--memory-swap", "1g", "--pids-limit", "128",
                "--read-only", "--tmpfs", "/tmp",
                "-v", f"{job}:/job:ro", "-v", f"{ROOT / 'harness.py'}:/harness.py:ro"]
-        if (ROOT / "lookahead.py").exists():
+        if detector and (ROOT / "lookahead.py").exists():
             cmd += ["-v", f"{ROOT / 'lookahead.py'}:/lookahead.py:ro"]
         cmd += [IMAGE, "timeout", str(timeout), "python", "/harness.py"]
         try:

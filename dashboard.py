@@ -9,6 +9,7 @@ import functools
 import json
 import math
 import os
+import threading
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,9 +18,12 @@ from urllib.parse import parse_qs, urlparse
 import duckdb
 import numpy as np
 
+import agents
 import backtest
 import dsr
 import pipeline
+import sandbox
+import static_check
 import store
 
 ROOT = Path(__file__).parent
@@ -28,6 +32,9 @@ LIST_COLS = ("id, created_at, run_id, pilot, tries, parent_id, family, left(hypo
              # the earlier attempts an idea says it builds on, for the lineage view
              "CAST(regexp_extract_all(hypothesis, '#([0-9]{1,9})', 1) AS BIGINT[]) AS refs")
 BACKTESTED = "status IN ('ok', 'too_few_trades', 'duplicate')"
+POSITIONS = ROOT / "runs" / "positions"  # replay cache: one file per attempt
+REPLAYABLE = ("ok", "too_few_trades", "duplicate", "no_trades")  # statuses whose code ran and produced positions
+_sandbox_lock = threading.Lock()  # one replay in the sandbox at a time
 
 
 def clean(x):
@@ -60,13 +67,54 @@ def state(run=None):
         "funnel": funnel[0] if funnel else None,
         "scores": [r["timing_sharpe"] for r in store.query(
             f"SELECT timing_sharpe FROM attempts WHERE {where} AND {BACKTESTED}", params)],
-        "attempts": store.query(f"SELECT {LIST_COLS} FROM attempts WHERE {where} ORDER BY id DESC LIMIT 1000", params),
+        "attempts": with_groups(run, store.query(f"SELECT {LIST_COLS} FROM attempts WHERE {where} ORDER BY id DESC "
+                                                 f"LIMIT {5000 if run else 1000}", params)),
         "tele": telemetry(where, params),
         "locks": {"detector": (ROOT / "lookahead.py").exists(),
                   "holdout_opened": (ROOT / "results" / "HOLDOUT_OPENED.json").exists()},
         "week5": week5(run),
+        "fee": backtest.FEE,  # the replay recomputes one symbol's equity bar by bar with the judge's formula
         "lessons": lessons(run),
     })
+
+
+def with_groups(run, rows):
+    """Add each attempt's near-copy group. Groups only mean something inside one run."""
+    found = groups(run, store.count("run_id = ?", [run])) if run else {}
+    for r in rows:
+        r["group"] = found.get(r["id"], r["id"])
+    return rows
+
+
+@functools.lru_cache(maxsize=8)
+def groups(run, _count):
+    """{attempt id: group id} for one run. _count is the run's size, so the cache refreshes as it grows.
+
+    Ideas that share an exit and an entry condition (agents._skeleton, the same test the researcher's
+    proposals must pass) are one rule with a filter swapped, and fall in one group, also through a
+    chain. A retry belongs to its idea's group. The group id is the group's earliest attempt.
+    """
+    parent, idea, seen = {}, None, []
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for r in store.query("SELECT id, tries, hypothesis FROM attempts WHERE run_id = ? ORDER BY id", [run]):
+        parent[r["id"]] = r["id"]
+        if r["tries"] and idea is not None:
+            parent[r["id"]] = idea
+            continue
+        idea = r["id"]
+        entry, exit_ = agents._skeleton(r["hypothesis"])
+        if exit_:
+            for j, e, x in seen:
+                if x == exit_ and e & entry and find(j) != find(idea):
+                    parent[max(find(j), find(idea))] = min(find(j), find(idea))  # the earlier root wins
+        seen.append((idea, entry, exit_))
+    return {i: find(i) for i in parent}
 
 
 def telemetry(where, params):
@@ -136,15 +184,63 @@ def benchmark():
             "equity": backtest.equity_curve(closes, [np.ones(len(c)) for c in closes], fee=0)[::24].tolist()}
 
 
-def curves(run=None):
-    """Thinned equity curves of the latest backtested attempts, worst timing Sharpe first, for the 3D terrain."""
-    where, params = ("run_id = ?", [run]) if run else ("true", [])
-    rows = store.query(f"SELECT id, family, timing_sharpe, equity FROM attempts WHERE {where} AND status = 'ok' "
-                       "AND equity IS NOT NULL ORDER BY id DESC LIMIT 200", params)
-    b = benchmark()
-    return clean({"dates": b["dates"][::12], "benchmark": b["equity"][::12],
-                  "curves": [{"id": r["id"], "family": r["family"], "timing": r["timing_sharpe"], "eq": r["equity"][::12]}
-                             for r in sorted(rows, key=lambda r: r["timing_sharpe"])]})
+@functools.cache
+def bars():
+    """Discovery-period hourly candles for the replay chart: {symbol: {t, o, h, l, c}}, t in Unix seconds.
+
+    Discovery only. Validation and holdout bars must never reach this page (PLAN.md, "Splits").
+    """
+    try:
+        frames = pipeline.load_discovery()
+    except SystemExit:
+        return {}
+    return {s: {"t": df.ts.values.astype("datetime64[s]").astype("int64").tolist(),
+                **{k: df[col].round(8).tolist() for k, col in (("o", "open"), ("h", "high"), ("l", "low"), ("c", "close"))}}
+            for s, df in frames.items()}
+
+
+@functools.cache
+def _packed():
+    return sandbox.pack(pipeline.load_discovery())
+
+
+def change_points(pos):
+    """[[bar index, new position], ...] for every bar where the position differs from the bar before (flat before bar 0)."""
+    p = backtest.clean_positions(pos)
+    return [[int(i), round(float(p[i]), 6)] for i in np.flatnonzero(np.diff(p, prepend=0.0))]
+
+
+def positions(attempt_id):
+    """An attempt's positions on the discovery bars, as change points per symbol, or {"error": text}.
+
+    Positions are not stored in the log, so the strategy is run again in the Docker sandbox, the same
+    code on the same data that produced its logged score, and the result is cached in runs/positions/.
+    """
+    path = POSITIONS / f"{attempt_id}.json"
+    if path.exists():
+        return json.loads(path.read_text())
+    rows = store.query("SELECT code, status FROM attempts WHERE id = ?", [attempt_id])
+    if not rows:
+        return None
+    if rows[0]["status"] not in REPLAYABLE:
+        return {"error": "This attempt never produced positions, so there is nothing to replay."}
+    if static_check.check(rows[0]["code"] or ""):
+        return {"error": "This attempt's code does not pass the static check, so it is not run again."}
+    with _sandbox_lock:
+        if path.exists():  # another request finished it while this one waited
+            return json.loads(path.read_text())
+        try:
+            out = sandbox.run(rows[0]["code"], _packed(), timeout=60, detector=False)
+        except (RuntimeError, OSError) as e:
+            return {"error": f"The sandbox could not start. Is Docker Desktop running? ({str(e)[:160]})"}
+        except SystemExit as e:
+            return {"error": str(e)}
+    if "error" in out:
+        return {"error": f"Running it again failed ({out['error']}): {out['detail'][-300:]}"}
+    result = {"changes": {s: change_points(np.array(out["positions"][s], dtype=float)) for s in sorted(out["positions"])}}
+    POSITIONS.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result))
+    return result
 
 
 def attempt(attempt_id):
@@ -159,8 +255,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply((ROOT / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
         if url.path == "/api/state":
             return self.reply_json(state(parse_qs(url.query).get("run", [None])[0]))
-        if url.path == "/api/equity":
-            return self.reply_json(curves(parse_qs(url.query).get("run", [None])[0]))
+        if url.path == "/api/bars":
+            return self.reply_json(bars())
+        if url.path.startswith("/api/positions/") and url.path.rsplit("/", 1)[1].isdigit():
+            found = positions(int(url.path.rsplit("/", 1)[1]))
+            if found:
+                return self.reply_json(found)
         if url.path.startswith("/api/attempt/") and url.path.rsplit("/", 1)[1].isdigit():
             found = attempt(int(url.path.rsplit("/", 1)[1]))
             if found:

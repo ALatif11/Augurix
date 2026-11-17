@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FinProj · Strategy discovery</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-/* Colours: chart surface, inks and the two series are the validated pair for each mode (blue and orange,
+/* Colours: surfaces, inks and the three series are the validated set for each mode (blue, orange, aqua:
    checked for colour-blind separation and contrast on these surfaces). Clay is for interface accents only, never data. */
 :root {
   color-scheme: light dark;
   --page: #f4f3ee; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.04); --inset: #f4f3ee;
-  --s1: #2a78d6; --s2: #eb6834; --accent: #c96442;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --accent: #c96442; --ghost: #dcdbd4;
   --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -21,12 +22,12 @@
   :root {
     --page: #121211; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.05); --inset: #121211;
-    --s1: #3987e5; --s2: #d95926; --accent: #d97757;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --accent: #d97757; --ghost: #33332f;
   }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 56px; }
+main { max-width: 1320px; margin: 0 auto; padding: 20px 20px 56px; }
 header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 h1 { font: 500 20px var(--serif); margin: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 10px; }
 h1 i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
@@ -35,31 +36,27 @@ h1 span { color: var(--ink2); }
 section { margin-top: 36px; }
 h2 { font: 500 22px/1.25 var(--serif); margin: 0 0 4px; }
 h3 { font: 600 14px var(--sans); margin: 0 0 2px; }
-.sub { color: var(--ink2); font-size: 13.5px; margin: 0 0 14px; max-width: 78ch; }
+.sub { color: var(--ink2); font-size: 13.5px; margin: 0 0 14px; max-width: 80ch; }
 label { color: var(--ink2); font-size: 13px; }
 select, button { font: 13px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
 button { cursor: pointer; }
 button:hover, select:hover { border-color: var(--axis); }
+button:disabled { opacity: .5; cursor: default; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--wash); border-radius: 10px; }
-.tabs button { border: 0; background: none; color: var(--ink2); border-radius: 7px; }
-.tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
-#spin[aria-pressed="true"] { border-color: var(--ink2); }
+.link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .live { color: var(--ink2); font-size: 13px; display: flex; align-items: center; gap: 8px; }
 .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
 .live.off i { background: var(--crit); }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; min-width: 0; }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
-.work { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 980px) { .work { grid-template-columns: 1fr; } }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
 .row h2, .row h3 { flex: 1 1 auto; margin: 0; }
-.row .aside { color: var(--ink2); font-size: 13px; }
-.row .aside b { color: var(--ink); font-weight: 600; }
+.aside { color: var(--ink2); font-size: 13px; }
+.aside b { color: var(--ink); font-weight: 600; }
 
-.verdict { font: 500 26px/1.3 var(--serif); margin: 0 0 6px; max-width: 30ch; text-wrap: balance; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin: 18px -20px -18px; border-top: 1px solid var(--border); }
+.verdict { font: 500 26px/1.3 var(--serif); margin: 0 0 6px; max-width: 32ch; text-wrap: balance; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 18px -20px -18px; border-top: 1px solid var(--border); }
 .tiles > div { padding: 14px 20px; border-right: 1px solid var(--border); }
 .tiles > div:last-child { border-right: 0; }
 .tiles .k { color: var(--ink2); font-size: 13px; }
@@ -68,7 +65,6 @@ button:hover, select:hover { border-color: var(--axis); }
 .note { margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--wash); color: var(--ink2); font-size: 13.5px; }
 .note b { color: var(--ink); }
 
-/* A meter is a list of labelled bars: label, bar, number */
 .meter { display: grid; grid-template-columns: minmax(96px, max-content) minmax(40px, 1fr) minmax(0, max-content); gap: 9px 14px; align-items: center; font-size: 13.5px; }
 .meter .track { height: 10px; }
 .meter .bar { height: 10px; background: var(--s1); border-radius: 0 4px 4px 0; min-width: 2px; }
@@ -77,57 +73,112 @@ button:hover, select:hover { border-color: var(--axis); }
 .meter .num small, .meter .why { color: var(--muted); font-size: 12.5px; }
 .meter .lbl.off { color: var(--muted); }
 
-.stage { position: relative; height: 520px; margin: 4px -20px 0; touch-action: none; cursor: grab; }
-.stage.dragging { cursor: grabbing; }
-.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-@media (max-width: 700px) { .stage { height: 360px; } }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink2); font-size: 13px; margin: 8px 0 0; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
-.legend i.line { width: 14px; height: 2px; border-radius: 0; vertical-align: middle; }
-.legend i.dim { opacity: .4; }
-.legend i.diamond { border-radius: 0; transform: rotate(45deg) scale(.8); }
-.legend i.ring { background: none !important; border: 2px solid var(--warn); }
-.legend i.hollow { background: var(--surface) !important; border: 2px solid var(--s1); }
-#picked { margin: 10px 0 0; color: var(--ink2); font-size: 13.5px; }
-#picked b { color: var(--ink); font-weight: 600; }
+/* compare */
+.pick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.pick label { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); cursor: pointer; color: var(--ink); }
+.pick label:has(input:checked) { border-color: var(--ink2); }
+.pick i { width: 10px; height: 10px; border-radius: 50%; }
+table.cmp td, table.cmp th { text-align: right; }
+table.cmp td:first-child, table.cmp th:first-child { text-align: left; }
+table.cmp tbody tr { cursor: default; }
+table.cmp tbody tr:hover { background: none; }
+
+/* filters */
+.filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .filters { grid-template-columns: 1fr; } }
+.hists { display: grid; gap: 14px; }
+.hist .row { margin-bottom: 2px; }
+.hist .range { color: var(--ink2); font-size: 12.5px; }
+.brushable { cursor: crosshair; touch-action: none; user-select: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border-radius: 999px; padding: 4px 10px; font-size: 12.5px; color: var(--ink2); }
+.chips button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink2); background: var(--wash); }
+.status { margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--ink2); }
+.status b { color: var(--ink); }
 
 svg { display: block; width: 100%; height: auto; overflow: visible; }
 svg text { fill: var(--muted); font: 11.5px var(--sans); }
 svg .lab { fill: var(--ink2); }
 .chart { position: relative; }
-.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.14); display: none; max-width: 340px; }
+.tip { position: absolute; z-index: 5; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.14); display: none; max-width: 360px; }
 .tip b { font-weight: 600; }
 .tip span { color: var(--ink2); }
 .tip .idea { white-space: normal; display: block; margin-top: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink2); font-size: 13px; margin: 8px 0 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.legend i.line { width: 14px; height: 2px; border-radius: 0; vertical-align: middle; }
+.legend i.band { width: 14px; border-radius: 2px; }
 
-.scroll { max-height: 640px; overflow: auto; margin: 0 -20px -18px; border-top: 1px solid var(--border); }
+/* strategies + inspect */
+.work { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1060px) { .work { grid-template-columns: 1fr; } }
+#detail { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 1060px) { #detail { position: static; max-height: none; } }
+.scroll { max-height: calc(100vh - 140px); min-height: 360px; overflow: auto; margin: 0 -20px -18px; border-top: 1px solid var(--border); }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; font-size: 12.5px; color: var(--ink2); padding: 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+th { position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left; font-weight: 500; font-size: 12.5px; color: var(--ink2); padding: 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
 td { padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
 th:first-child, td:first-child { padding-left: 20px; }
 th.r, td.r { text-align: right; }
 tbody tr { cursor: pointer; }
 tbody tr:hover { background: var(--wash); }
 tbody tr[aria-selected="true"] { background: var(--wash); box-shadow: inset 3px 0 0 var(--accent); }
-td.idea { color: var(--ink2); max-width: 0; width: 55%; overflow: hidden; text-overflow: ellipsis; }
+tbody tr.member td { background: var(--inset); }
+table.one-outcome th:nth-child(4), table.one-outcome td:nth-child(4) { display: none; }
+tbody tr.member td:first-child { padding-left: 34px; }
+td.idea { color: var(--ink2); min-width: 170px; width: 60%; white-space: normal; }
+td.idea span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; line-height: 1.4; }
+.count { display: inline-block; min-width: 26px; padding: 0 6px; border-radius: 999px; background: var(--wash); color: var(--ink2); font-size: 12px; text-align: center; margin-right: 6px; }
+.expand { border: 0; background: none; padding: 0 4px 0 0; color: var(--ink2); font-size: 12px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .chip svg { width: 10px; height: 10px; flex: none; }
 .tag { color: var(--muted); font-size: 12px; }
 
-dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px 14px; margin: 14px 0; }
+dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 14px; margin: 14px 0; }
 dt { color: var(--ink2); font-size: 12.5px; }
 dd { margin: 0; font: 500 17px var(--sans); }
-pre { margin: 10px 0 0; padding: 12px 14px; background: var(--inset); border-radius: 8px; overflow: auto; max-height: 340px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
+pre { margin: 10px 0 0; padding: 12px 14px; background: var(--inset); border-radius: 8px; overflow: auto; max-height: 320px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
 pre.err { border-left: 3px solid var(--crit); }
 .idea-text { margin: 8px 0 10px; }
 .empty { color: var(--muted); padding: 22px 0; text-align: center; }
+.block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.lineage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.lineage button { padding: 3px 8px; border-radius: 6px; font-size: 12.5px; }
+.lineage button.here { border-color: var(--ink2); font-weight: 600; }
+.lineage .arrow { color: var(--muted); }
+
+/* replay */
+.replay-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.replay-bar .tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--wash); border-radius: 10px; }
+.replay-bar .tabs button { border: 0; background: none; color: var(--ink2); border-radius: 7px; padding: 4px 10px; }
+.replay-bar .tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
+#play { min-width: 92px; font-weight: 600; }
+#scrub { flex: 1 1 160px; accent-color: var(--accent); }
+.stage { position: relative; height: 380px; }
+.stage .fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 12px; margin: 10px 0 0; font-size: 12.5px; color: var(--ink2); }
+.readout b { display: block; color: var(--ink); font: 500 16px var(--sans); transition: background-color .6s; border-radius: 4px; }
+.readout b.flash-buy { background: color-mix(in srgb, var(--s1) 22%, transparent); transition: none; }
+.readout b.flash-sell { background: color-mix(in srgb, var(--s2) 22%, transparent); transition: none; }
+.tradelog { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12.5px; color: var(--ink2); min-height: 22px; }
+.tradelog li { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--grid); }
+.tradelog li b { min-width: 34px; color: var(--ink); }
+.pulse { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid var(--c); opacity: 0; }
+.float { position: absolute; transform: translate(-50%, -50%); font: 600 12px var(--sans); color: var(--c); padding: 1px 6px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--c); opacity: 0; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .pulse { animation: ring .75s ease-out forwards; }
+  .float { animation: rise 1.1s ease-out forwards; }
+  .tradelog li:first-child { animation: slide .35s ease-out; }
+}
+@keyframes ring { from { transform: scale(.35); opacity: .95; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes rise { 0% { opacity: 0; transform: translate(-50%, -30%); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -190%); } }
+@keyframes slide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+details.notes-box summary { cursor: pointer; font: 500 22px/1.25 var(--serif); list-style-position: outside; }
 .notes h3 { margin-bottom: 8px; }
 .notes b { display: block; font-weight: 600; font-size: 13px; margin-top: 10px; }
 .notes ul { margin: 4px 0 0; padding-left: 20px; color: var(--ink2); }
 .notes li { margin: 3px 0; max-width: 100ch; }
-details { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
-summary { cursor: pointer; color: var(--ink2); font-size: 13.5px; }
-details .notes { margin-top: 12px; }
 .locked-card { display: flex; gap: 14px; align-items: flex-start; }
 .locked-card svg { width: 20px; height: 20px; flex: none; margin-top: 3px; color: var(--muted); }
 .locked-card p { margin: 2px 0 0; color: var(--ink2); max-width: 78ch; }
@@ -137,97 +188,91 @@ details .notes { margin-top: 12px; }
 <main>
   <header>
     <h1><i></i>FinProj <span>Strategy discovery</span></h1>
-    <label>Run <select id="run"><option value="">All runs</option></select></label>
+    <label>Run <select id="run"></select></label>
     <div class="live off" id="live"><i></i><span id="stamp">Connecting…</span></div>
   </header>
   <p class="meta" id="meta"></p>
 
+  <!-- 1. Overview: did this run find anything, and where did attempts fail -->
   <section class="card" style="margin-top:18px">
     <p class="verdict" id="verdict">Loading the log…</p>
     <p class="sub" id="verdict-why" style="margin:0"></p>
     <p class="note"><b>These are in-sample numbers.</b> Everything on this page is measured on 2019–2022, a period the model has seen. None of it is evidence that a strategy works. Only the holdout counts, and it is still locked.</p>
     <div class="tiles" id="tiles"></div>
   </section>
-
   <section>
-    <h2>The funnel</h2>
-    <p class="sub">How many attempts are left after each check, and where the rest stopped. This table is what the project delivers.</p>
     <div class="cols">
-      <div class="card"><h3>Left after each check</h3><p class="sub">Share of all attempts in this run.</p><div class="meter" id="funnel"></div></div>
+      <div class="card"><h3>Left after each check</h3><p class="sub">Share of all attempts in this run. This table is what the project delivers.</p><div class="meter" id="funnel"></div></div>
       <div class="card"><h3>Where rejected attempts stopped</h3><p class="sub">Count, then the running share of all rejections.</p><div class="meter" id="stops"></div></div>
     </div>
   </section>
 
+  <!-- 2. Compare runs -->
   <section>
-    <h2>Scores</h2>
-    <p class="sub">Timing Sharpe is the return per unit of risk after fees, minus what holding the same average position would have earned. Zero means no skill. The dashed line is the score the best of this many no-skill ideas is expected to reach.</p>
-    <div class="cols">
-      <div class="card"><h3>Every backtested attempt</h3><p class="sub">Luck alone spreads four-year scores about ±0.5 around zero. The long left tail is trading fees.</p><div id="hist"></div></div>
-      <div class="card"><h3>By strategy family</h3>
-        <div class="legend" style="margin:4px 0 10px"><span><i style="background:var(--s1)"></i>Median</span><span><i class="hollow"></i>Best</span></div>
-        <div id="ranges"></div></div>
+    <h2>Compare runs</h2>
+    <p class="sub">Pick up to three runs to see whether a prompt change helped. Each run is measured on the same discovery data with the same judge.</p>
+    <div class="pick" id="pick"></div>
+    <div class="cols" id="compare" hidden>
+      <div class="card" style="padding:0 0 4px"><table class="cmp"><thead id="cmp-head"></thead><tbody id="cmp-body"></tbody></table></div>
+      <div class="card"><h3>Share of backtested attempts at or below each score</h3>
+        <p class="sub">A curve further right means better scores. Where a curve sits at zero, nothing scored that low.</p>
+        <div id="ecdf"></div><div class="legend" id="ecdf-legend"></div></div>
     </div>
   </section>
 
+  <!-- 3. Narrow down -->
+  <section>
+    <div class="row"><h2>Narrow down</h2><button id="reset">Clear all filters</button></div>
+    <p class="sub">Drag across any chart to keep only that range; click a chart without dragging to clear it. Every chart and the table below follow the same filters. Grey shows everything backtested in this run; blue shows what passes the other filters.</p>
+    <div class="filters">
+      <div class="card hists">
+        <div class="hist" id="h-score"></div>
+        <div class="hist" id="h-trades"></div>
+        <div class="hist" id="h-market"></div>
+        <div><h3 style="margin-bottom:6px">Family</h3><div class="chips" id="fam"></div></div>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Score against trading activity</h3><span class="aside">drag a box to select</span></div>
+        <div id="scatter"></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Passes the filters</span><span><i style="background:var(--axis)"></i>Filtered out</span><span><i class="band" style="background:var(--wash);outline:1px dashed var(--axis)"></i>±0.5, the spread luck alone produces</span><span><i class="line" style="background:var(--ink2)"></i>Best expected from luck</span></div>
+      </div>
+    </div>
+    <p class="status" id="status"></p>
+  </section>
+
+  <!-- 4. Strategies and inspect -->
   <section>
     <div class="row">
-      <h2>Explore the ideas</h2>
-      <div class="tabs" role="group" aria-label="View">
-        <button id="mode-space" aria-pressed="true">Strategy space</button>
-        <button id="mode-lineage" aria-pressed="false">Idea lineage</button>
-        <button id="mode-terrain" aria-pressed="false">Equity curves</button>
-      </div>
-      <button id="spin" aria-pressed="false" title="Turn the view slowly">Rotate</button>
-    </div>
-    <p class="sub" id="stage-sub"></p>
-    <div class="card">
-      <div class="stage" id="stage">
-        <canvas id="scene" role="img" aria-label="Three-dimensional view of the attempts. The same data is in the attempts table below."></canvas>
-        <div class="tip" id="tip3d"></div>
-      </div>
-      <div class="legend" id="stage-legend"></div>
-      <p id="picked"></p>
-    </div>
-  </section>
-
-  <section>
-    <h2>How the run went</h2>
-    <p class="sub">Speed of the search and where the model's time was spent.</p>
-    <div class="cols">
-      <div class="card"><div class="row"><h3>Attempts per 5 minutes</h3><span class="aside" id="pace-n"></span></div><div id="pace"></div></div>
-      <div class="card"><div class="row"><h3>Model time by agent</h3><span class="aside" id="llm-n"></span></div><div class="meter" id="llm"></div></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Reviewer notes</h2>
-    <p class="sub">Every 20 attempts the model reads the latest results and writes notes for the researcher agent. They are working notes built from the scores above, not findings.</p>
-    <div class="card" id="lessons"></div>
-  </section>
-
-  <section>
-    <div class="row">
-      <h2>Attempts</h2>
-      <label>Outcome <select id="filter"><option value="">All</option></select></label>
-      <label>Sort <select id="order"><option value="new">Newest first</option><option value="best">Best score first</option></select></label>
+      <h2>Strategies</h2>
+      <label><input type="checkbox" id="group" checked> Group near-copies</label>
+      <label>Outcome <select id="outcome"></select></label>
+      <label>Sort <select id="order"><option value="best">Best score first</option><option value="count">Biggest group first</option><option value="new">Newest first</option></select></label>
     </div>
     <p class="sub" id="count"></p>
     <div class="work">
-      <div class="card" style="padding-top:0"><div class="scroll" style="margin-top:0;border-top:0;border-radius:12px">
+      <div class="card" style="padding-top:0"><div class="scroll" style="border-top:0;border-radius:12px">
         <table>
-          <thead><tr><th>#</th><th>Time</th><th>Family</th><th>Idea</th><th>Outcome</th><th class="r">Timing</th><th class="r">Net</th><th class="r">Trades</th></tr></thead>
+          <thead><tr><th>#</th><th>Family</th><th>Idea</th><th>Outcome</th><th class="r">Timing</th><th class="r">Trades</th><th class="r">In market</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div></div>
-      <div class="card" id="detail"><div class="empty">Select an attempt to see its idea, code and equity curve.</div></div>
+      <div class="card" id="detail"><div class="empty">Select a strategy to inspect it and replay its trades.</div></div>
     </div>
+  </section>
+
+  <section>
+    <details class="card notes-box" id="lessons-box">
+      <summary>Reviewer notes</summary>
+      <p class="sub" style="margin-top:8px">Every 20 attempts the model reads the latest results and writes notes for the researcher agent. They are working notes built from the scores above, not findings.</p>
+      <div id="lessons"></div>
+    </details>
   </section>
 
   <section class="card locked-card">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
     <div>
       <h3>Forward test: locked</h3>
-      <p>Scoring frozen strategies on new market data starts only after the holdout has been opened (PLAN.md, Week 5). Current prices are holdout data, so this page does not fetch them. Looking early would spend the one clean test the project has.</p>
+      <p>Scoring frozen strategies on new market data starts only after the holdout has been opened (PLAN.md, Week 5). Current prices are holdout data, so this page does not fetch them; the replay uses 2019–2022 bars only.</p>
     </div>
   </section>
 </main>
@@ -235,7 +280,7 @@ details .notes { margin-top: 12px; }
 <script>
 const $ = id => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
-// All data reaches the page through textContent / setAttribute / canvas text, never innerHTML: ideas, errors and code are model output.
+// All data reaches the page through textContent / setAttribute / chart APIs, never innerHTML: ideas, errors and code are model output.
 function h(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) k === "class" ? e.className = v : e.setAttribute(k, v);
@@ -248,15 +293,16 @@ function s(tag, attrs = {}, ...kids) {
   e.append(...kids);
   return e;
 }
-const minus = t => t.replace("-", "−");  // a real minus sign, not a hyphen
+const minus = t => t.replace("-", "−");
 const fmt = (x, d = 2) => x == null ? "–" : minus(x.toFixed(d));
 const signed = x => x == null ? "–" : (x > 0 ? "+" : "") + minus(x.toFixed(2));
 const pct = x => x == null ? "–" : minus(Math.round(x * 100) + "%");
-const big = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(Math.round(n));
 const clock = t => new Date(t + "Z").toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 const plain = f => (f || "no family").replace(/_/g, " ");
+const median = xs => { if (!xs.length) return null; const v = xs.slice().sort((a, b) => a - b), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
 let cssCache = {};
 const css = name => cssCache[name] ??= getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const calm = matchMedia("(prefers-reduced-motion: reduce)");
 
 const OUTCOME = {
   ok:             ["Backtested",   "good"],
@@ -269,267 +315,18 @@ const OUTCOME = {
   crash:          ["Crashed",      "crit"],
   timeout:        ["Timed out",    "crit"],
 };
-const outcome = status => (OUTCOME[status] || [status, "warn"])[0];
-// Shape repeats what colour says, so the outcome never depends on colour alone.
-const SHAPE = {
+const outcome = st => (OUTCOME[st] || [st, "warn"])[0];
+const SHAPE = {  // shape repeats what colour says, so the outcome never depends on colour alone
   good: () => s("circle", {cx: 5, cy: 5, r: 4.5}),
   warn: () => s("path", {d: "M5 .5 9.8 9.5H.2z"}),
   serious: () => s("rect", {x: 1, y: 1, width: 8, height: 8, transform: "rotate(45 5 5)"}),
   crit: () => s("path", {d: "M1 1 9 9M9 1 1 9", stroke: "var(--crit)", "stroke-width": 2.4, fill: "none"}),
 };
-function chip(status) {
-  const [label, level] = OUTCOME[status] || [status, "warn"];
+function chip(st) {
+  const [label, level] = OUTCOME[st] || [st, "warn"];
   return h("span", {class: "chip"}, s("svg", {viewBox: "0 0 10 10", fill: `var(--${level})`, "aria-hidden": "true"}, SHAPE[level]()), label);
 }
-
-let selected = null, firstLoad = true, autoPick = true, last = null;
-const BUILT_ON = 3;  // an attempt this many ideas have built on is ringed (agents.MAX_REFINES)
-
-/* ---------- 3D stage: a small perspective renderer on a 2D canvas, no library ---------- */
-const cv = $("scene"), ctx = cv.getContext("2d"), tip3d = $("tip3d");
-const stage = {mode: "space", yaw: -0.62, pitch: 0.4, w: 0, h: 0, points: [], curves: null, lineage: null, byId: new Map(), picks: [], hover: null, drag: null, dirty: true, spin: false};
-const TEXT = {
-  space: "Each dot is one backtested attempt. Height is its timing Sharpe; the other two axes are how often it trades and how much of the time it is in the market. The flat sheet is zero skill and the dashed sheets mark ±0.5, the spread luck alone produces over four years. Dots between them are faded because they cannot be told apart from luck. Scores below −3 are drawn at −3.",
-  lineage: "Each dot is one idea. Its sector is the strategy family, its distance from the centre is when it was tried (latest at the rim), and its height is its timing Sharpe above or below the zero-skill disc. A line joins an idea to the earlier attempt it was built on. Many lines into one dot means the search kept circling a single lucky result.",
-  terrain: "Each line is one attempt's growth of 1 unit through 2019–2022, ordered from the lowest timing Sharpe at the front to the highest at the back. They share one shape because that shape is the market itself. What a strategy adds is only the small difference between its line and its neighbours.",
-};
-const PITCH = {lineage: 0.62, space: 0.4, terrain: 0.58};
-function setMode(mode) {
-  stage.mode = mode; stage.dirty = true; stage.hover = null; tip3d.style.display = "none";
-  stage.pitch = PITCH[mode];
-  for (const m of Object.keys(TEXT)) $("mode-" + m).setAttribute("aria-pressed", m === mode);
-  $("stage-sub").textContent = TEXT[mode] + " Drag to turn the view; select a dot to inspect it.";
-  const dot = (cls, color, text) => h("span", {}, h("i", {class: cls, style: `background:${color}`}), text);
-  $("stage-legend").replaceChildren(...({
-    lineage: [dot("", "var(--s1)", "Idea, outside the luck band"), dot("dim", "var(--s1)", "Inside the luck band"), dot("dim", "var(--muted)", "Rejected before a score"),
-              dot("ring", "", `Built on ${BUILT_ON} or more times`), dot("line", "var(--s1)", "Built on")],
-    space: [dot("", "var(--s1)", "Attempt, outside the luck band"), dot("dim", "var(--s1)", "Attempt, inside the luck band"), dot("diamond", "var(--s2)", "Hand-written baseline")],
-    terrain: [dot("line", "var(--s1)", "Attempts, stronger with higher timing Sharpe"), dot("line", "var(--s2)", "Buy and hold")],
-  })[mode]);
-}
-function fit() {
-  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); stage.w = r.width; stage.h = r.height; stage.dirty = true;
-}
-// World axes: x to the right, y away from the viewer, z up. Everything is drawn inside roughly [-1, 1] on each.
-function P(x, y, z) {
-  const cy = Math.cos(stage.yaw), sy = Math.sin(stage.yaw), cp = Math.cos(stage.pitch), sp = Math.sin(stage.pitch);
-  const X = x * cy - y * sy, Y = x * sy + y * cy;
-  const depth = Y * cp - z * sp, up = Y * sp + z * cp;
-  const k = 3.6 / (3.6 + depth), S = Math.min(stage.w * 0.3, stage.h * 0.36) * (stage.mode === "lineage" ? 1.22 : 1);
-  return {x: stage.w / 2 + X * k * S, y: stage.h * 0.47 - up * k * S, d: depth, k};
-}
-function path(points, close) {
-  ctx.beginPath();
-  points.forEach((p, i) => { const q = P(...p); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
-  if (close) ctx.closePath();
-}
-function stroke(color, alpha = 1, width = 1, dash) {
-  ctx.setLineDash(dash || []); ctx.strokeStyle = css(color); ctx.globalAlpha = alpha; ctx.lineWidth = width;
-  ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineWidth = 1;
-}
-function fill(color, alpha = 1) { ctx.fillStyle = css(color); ctx.globalAlpha = alpha; ctx.fill(); ctx.globalAlpha = 1; }
-function sheet(z, tint, line, dash) {  // tint and line are [colour variable, opacity]
-  path([[-1, -1, z], [1, -1, z], [1, 1, z], [-1, 1, z]], true);
-  if (tint) fill(...tint);
-  stroke(line[0], line[1], 1, dash);
-}
-function gridLines(z, n = 8) {
-  for (let i = 1; i < n; i++) {
-    const t = -1 + 2 * i / n;
-    path([[t, -1, z], [t, 1, z]]); stroke("--grid");
-    path([[-1, t, z], [1, t, z]]); stroke("--grid");
-  }
-}
-function label(text, pos, align = "center", color = "--muted") {
-  const q = P(...pos);
-  ctx.font = `11.5px ${css("--sans")}`; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillStyle = css(color);
-  ctx.fillText(text, q.x, q.y);
-}
-function ringAround(q, r, color) { ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); stroke(color, 1, 1.5); }
-
-/* Lineage: ideas on a disc (sector = family, radius = time, height = score), joined to what they were built on. */
-function buildLineage(attempts) {
-  const rows = attempts.slice().reverse(), nodes = [], byId = new Map(), count = {};
-  let group = [];
-  const flush = () => {  // one idea is its first try plus its retries; the last try is its result
-    if (!group.length) return;
-    const a = group[group.length - 1], node = {id: a.id, family: a.family || "none", status: a.status, score: a.status === "ok" ? a.timing_sharpe : null,
-                                               trades: a.trades_per_symbol, idea: (a.hypothesis || "").slice(0, 140), refs: new Set([...(a.refs || []), a.parent_id]), kids: 0};
-    for (const g of group) byId.set(g.id, node);
-    nodes.push(node); group = [];
-  };
-  for (const a of rows) { if (!a.tries) flush(); group.push(a); }
-  flush();
-  const fams = [...new Set(nodes.map(n => n.family))].sort();
-  nodes.forEach((n, i) => {
-    const j = count[n.family] = (count[n.family] || 0) + 1;
-    const ang = (fams.indexOf(n.family) + 0.08 + 0.84 * ((j * 0.618034) % 1)) / fams.length * 2 * Math.PI;  // spread evenly inside the sector
-    const rad = 0.26 + 0.74 * (nodes.length > 1 ? i / (nodes.length - 1) : 1);
-    n.x = Math.cos(ang) * rad; n.y = Math.sin(ang) * rad;
-    n.z = n.score == null ? 0 : Math.max(-3, Math.min(2, n.score)) / 3 * 0.66;
-  });
-  const edges = [];
-  for (const n of nodes) for (const ref of n.refs) { const to = byId.get(ref); if (to && to !== n) { edges.push([n, to]); to.kids++; } }
-  return {nodes, edges, fams, count, byId};
-}
-function drawLineage() {
-  const L = stage.lineage;
-  if (!L || !L.nodes.length) return label("No attempts yet", [0, 0, 0], "center", "--ink2");
-  const K = L.fams.length, Z = v => v / 3 * 0.66, ring = r => Array.from({length: 73}, (_, i) => [Math.cos(i / 72 * 2 * Math.PI) * r, Math.sin(i / 72 * 2 * Math.PI) * r, 0]);
-  path(ring(1), true); fill("--ink", 0.03); stroke("--axis");
-  for (const r of [0.26, 0.5, 0.75]) { path(ring(r), true); stroke("--grid"); }
-  L.fams.forEach((f, k) => {
-    const a = k / K * 2 * Math.PI, m = (k + 0.5) / K * 2 * Math.PI;
-    path([[Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0], [Math.cos(a), Math.sin(a), 0]]); stroke("--axis");
-    label(`${plain(f)} · ${L.count[f]}`, [Math.cos(m) * 1.2, Math.sin(m) * 1.2, 0], "center", "--ink2");
-  });
-  path([[1, 0, Z(-3)], [1, 0, Z(2)]]); stroke("--axis");
-  for (const v of [-3, -2, -1, 1, 2]) label(signed(v), [1.04, 0, Z(v)], "left");
-  label("timing Sharpe", [1.04, 0, Z(2) + 0.09], "left", "--ink2");
-
-  const hot = stage.hover ?? selected;
-  const strand = (a, b) => {
-    const A = P(a.x, a.y, a.z), B = P(b.x, b.y, b.z), M = P((a.x + b.x) * 0.3, (a.y + b.y) * 0.3, Math.max(a.z, b.z) + 0.34);
-    ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo(M.x, M.y, B.x, B.y);
-  };
-  const faint = Math.max(0.14, Math.min(0.4, 90 / L.edges.length));
-  for (const [a, b] of L.edges) { strand(a, b); stroke("--s1", faint); }
-  for (const [a, b] of L.edges) if (a.id === hot || b.id === hot) { strand(a, b); stroke("--ink", 0.8, 1.3); }
-
-  const drawn = L.nodes.map(n => ({n, q: P(n.x, n.y, n.z)})).sort((a, b) => b.q.d - a.q.d);
-  for (const {n, q} of drawn) {
-    const scored = n.score != null, outside = scored && Math.abs(n.score) > 0.5, r = (n.id === stage.hover ? 6 : outside ? 4 : scored ? 3 : 2) * q.k;
-    if (outside) {  // a stem to the disc shows which side of zero the dot is on
-      const base = P(n.x, n.y, 0);
-      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(q.x, q.y); stroke("--s1", 0.22);
-    }
-    ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); fill(scored ? "--s1" : "--muted", outside ? 1 : 0.4);
-    if (n.kids >= BUILT_ON) ringAround(q, r + 4, "--warn");
-    if (n.id === selected) ringAround(q, r + 8, "--ink");
-    stage.picks.push({x: q.x, y: q.y, id: n.id, idea: n.idea, lines: [`#${n.id} · ${plain(n.family)}`,
-      (scored ? `timing ${signed(n.score)} · ${Math.round(n.trades)} trades` : outcome(n.status).toLowerCase()) + (n.kids ? ` · built on ${n.kids} times` : "")]});
-  }
-  const named = [];  // name the most built-on attempts, skipping any label that would sit on an earlier one
-  for (const n of L.nodes.filter(n => n.kids >= BUILT_ON).sort((a, b) => b.kids - a.kids)) {
-    const q = P(n.x, n.y, n.z + 0.1);
-    if (named.length < 3 && named.every(o => Math.abs(o.x - q.x) > 64 || Math.abs(o.y - q.y) > 13)) { named.push(q); label(`#${n.id} ×${n.kids}`, [n.x, n.y, n.z + 0.1], "center", "--ink"); }
-  }
-}
-
-function drawSpace() {
-  const pts = stage.points, FLOOR = -0.85;
-  if (!pts.length) return label("No backtested attempts yet", [0, 0, 0], "center", "--ink2");
-  const zmax = Math.min(3, Math.max(1.5, ...pts.map(p => Math.abs(p.score))));  // fee disasters far below −3 would flatten everything else
-  const Z = v => Math.max(-zmax, Math.min(zmax, v)) / zmax * 0.85;
-  const tmax = Math.max(3.4, ...pts.map(p => Math.log10(p.trades)));
-  const X = t => -1 + 2 * (Math.log10(Math.max(t, 1)) / tmax), Y = m => -1 + 2 * m;
-  sheet(FLOOR, null, ["--axis", 1]); gridLines(FLOOR);
-  sheet(Z(-0.5), ["--s1", 0.05], ["--s1", 0.5], [5, 5]);
-  sheet(0, ["--ink", 0.04], ["--ink2", 0.8]);
-  sheet(Z(0.5), ["--s1", 0.05], ["--s1", 0.5], [5, 5]);
-  path([[-1, 1, FLOOR], [-1, 1, 0.9]]); stroke("--axis");
-  for (const v of (zmax > 2 ? [-3, -2, -1, 0, 1, 2, 3] : [-0.5, 0, 0.5, 1, -1, 2, -2]).filter(v => Math.abs(v) <= zmax))
-    label(v ? signed(v) : "0 · no skill", [-1.06, 1, Z(v)], "right", v ? "--muted" : "--ink2");
-  label("timing Sharpe", [-1.06, 1, 0.98], "right", "--ink2");
-  for (const t of [10, 100, 1000].filter(t => Math.log10(t) <= tmax)) label(t.toLocaleString(), [X(t), -1.12, FLOOR]);
-  label("trades per symbol →", [0, -1.3, FLOOR], "center", "--ink2");
-  for (const m of [0, 0.5, 1]) label(pct(m), [1.1, Y(m), FLOOR], "left");
-  label("time in market →", [1.34, 0, FLOOR], "left", "--ink2");
-
-  const drawn = pts.map(p => ({p, top: P(X(p.trades), Y(p.pos), Z(p.score)), base: P(X(p.trades), Y(p.pos), 0)})).sort((a, b) => b.top.d - a.top.d);
-  for (const {p, top, base} of drawn) {
-    const color = p.baseline ? "--s2" : "--s1", outside = Math.abs(p.score) > 0.5, r = (p.id === stage.hover ? 7 : 5) * top.k;
-    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); stroke(color, outside ? 0.6 : 0.25);
-    ctx.beginPath();
-    if (p.baseline) { ctx.moveTo(top.x, top.y - r * 1.25); ctx.lineTo(top.x + r * 1.25, top.y); ctx.lineTo(top.x, top.y + r * 1.25); ctx.lineTo(top.x - r * 1.25, top.y); ctx.closePath(); }
-    else ctx.arc(top.x, top.y, r, 0, Math.PI * 2);
-    fill(color, outside ? 1 : 0.4); stroke("--surface", 1, 1.5);  // the ring keeps overlapping dots apart
-    if (p.id === selected) ringAround(top, r + 5, "--ink");
-    stage.picks.push({x: top.x, y: top.y, id: p.id, lines: [`#${p.id} · ${p.family}`, `timing ${signed(p.score)} · ${Math.round(p.trades)} trades · in market ${pct(p.pos)}`], idea: p.idea});
-  }
-}
-
-function drawTerrain() {
-  const c = stage.curves, BASE = -0.8;
-  if (!c || !c.curves.length) return label("No backtested attempts yet", [0, 0, 0], "center", "--ink2");
-  const all = c.curves.flatMap(r => r.eq).concat(c.benchmark).map(Math.log), lo = Math.min(...all), hi = Math.max(...all);
-  const n = c.dates.length, m = c.curves.length;
-  const X = i => -1 + 2 * i / (n - 1), Z = v => BASE + (Math.log(v) - lo) / ((hi - lo) || 1) * 1.6;
-  sheet(BASE, null, ["--axis", 1]); gridLines(BASE);
-  // Few attempts sit close together like a terrain; many spread over the whole depth.
-  const gap = m > 1 ? Math.min(0.14, 1.75 / (m - 1)) : 0, front = -gap * (m - 1) / 2;
-  const ridges = c.curves.map((r, j) => ({...r, y: front + gap * j, rank: m > 1 ? j / (m - 1) : 1}));
-  ridges.push({id: null, eq: c.benchmark, y: front - Math.max(gap, 0.1) * 1.5, bench: true});
-  ridges.sort((a, b) => P(0, b.y, 0).d - P(0, a.y, 0).d);
-  for (const r of ridges) {
-    const top = r.eq.slice(0, n).map((v, i) => [X(i), r.y, Z(v)]);
-    if (!r.bench) {  // each ridge's wall hides the ones behind it; the reference line stays see-through
-      path(top.concat([[X(top.length - 1), r.y, BASE], [-1, r.y, BASE]]), true); fill("--surface", 0.85);
-    }
-    path(top);
-    const hot = r.id != null && (r.id === selected || r.id === stage.hover);
-    stroke(hot ? "--ink" : r.bench ? "--s2" : "--s1", hot || r.bench ? 1 : 0.3 + 0.7 * r.rank, hot || r.bench ? 2 : 1.3);
-    if (r.bench) { const q = top[top.length - 1]; label("buy & hold", [q[0] + 0.05, q[1], q[2]], "left", "--ink2"); continue; }
-    for (let i = 0; i < top.length; i += 3) { const q = P(...top[i]); stage.picks.push({x: q.x, y: q.y, id: r.id, lines: [`#${r.id} · ${plain(r.family)}`, `timing ${signed(r.timing)} · ${c.dates[i]} · ${r.eq[i].toFixed(2)}×`]}); }
-  }
-  // Labels last, so no ridge wall paints over them.
-  c.dates.forEach((d, i) => { if (i && d.slice(0, 4) !== c.dates[i - 1].slice(0, 4)) label(d.slice(0, 4), [X(i), -1.15, BASE]); });
-  for (const v of [1, 2, 5, 10, 20, 50].filter(v => Math.log(v) >= lo && Math.log(v) <= hi)) label(v + "×", [-1.06, 1, Z(v)], "right");
-  label("growth of 1", [-1.06, 1, BASE + 1.72], "right", "--ink2");
-}
-
-function draw() {
-  stage.picks = [];
-  ctx.clearRect(0, 0, stage.w, stage.h);
-  ({lineage: drawLineage, space: drawSpace, terrain: drawTerrain})[stage.mode]();
-  stage.dirty = false;
-}
-function frame() {
-  if (stage.spin && !stage.drag && stage.hover == null) { stage.yaw += 0.0022; stage.dirty = true; }
-  if (stage.dirty && stage.w) draw();
-  requestAnimationFrame(frame);
-}
-const box = $("stage");
-box.onpointerdown = e => { stage.drag = {x: e.clientX, y: e.clientY, yaw: stage.yaw, pitch: stage.pitch, moved: false}; box.setPointerCapture(e.pointerId); box.classList.add("dragging"); };
-box.onpointermove = e => {
-  const r = box.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  if (stage.drag) {
-    const dx = e.clientX - stage.drag.x, dy = e.clientY - stage.drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 4) stage.drag.moved = true;
-    stage.yaw = stage.drag.yaw + dx * 0.008; stage.pitch = Math.max(0.06, Math.min(1.25, stage.drag.pitch + dy * 0.006));
-    tip3d.style.display = "none"; stage.dirty = true; return;
-  }
-  let best = null, bd = 16 * 16;
-  for (const p of stage.picks) { const d = (p.x - mx) ** 2 + (p.y - my) ** 2; if (d < bd) { bd = d; best = p; } }
-  if ((best && best.id) !== stage.hover) { stage.hover = best ? best.id : null; stage.dirty = true; }
-  if (!best) { tip3d.style.display = "none"; return; }
-  tip3d.replaceChildren(h("b", {}, best.lines[0]), h("br"), h("span", {}, best.lines[1]), ...(best.idea ? [h("span", {class: "idea"}, best.idea)] : []));
-  tip3d.style.display = "block";
-  tip3d.style.left = Math.max(8, Math.min(r.width - tip3d.offsetWidth - 8, mx > r.width / 2 ? mx - tip3d.offsetWidth - 14 : mx + 14)) + "px";
-  tip3d.style.top = Math.max(8, Math.min(r.height - tip3d.offsetHeight - 8, my - 10)) + "px";
-};
-box.onpointerup = e => { const d = stage.drag; stage.drag = null; box.classList.remove("dragging"); if (d && !d.moved && stage.hover != null) show(stage.hover); };
-box.onpointerleave = () => { if (!stage.drag) { stage.hover = null; tip3d.style.display = "none"; stage.dirty = true; } };
-for (const m of Object.keys(TEXT)) $("mode-" + m).onclick = () => setMode(m);
-$("spin").onclick = () => { stage.spin = !stage.spin; $("spin").setAttribute("aria-pressed", stage.spin); };
-new ResizeObserver(fit).observe(cv);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { cssCache = {}; stage.dirty = true; });  // the canvas reads its colours once
-
-// The line under the 3D view that names the selected attempt.
-function picked() {
-  const a = stage.byId.get(selected);
-  if (!a) return $("picked").replaceChildren();
-  const node = stage.lineage && stage.lineage.byId.get(a.id);
-  $("picked").replaceChildren(h("b", {}, `Selected: #${a.id}, ${plain(a.family)}. `),
-    a.timing_sharpe == null ? outcome(a.status) + "." : `Timing ${signed(a.timing_sharpe)}, ${Math.round(a.trades_per_symbol)} trades, in the market ${pct(a.mean_position)} of the time.`,
-    node && node.kids ? ` ${node.kids} later ideas were built on it.` : "");
-}
-
-/* ---------- sections ---------- */
-// rows: [label, share 0..1 or null when locked, text on the right, tooltip]
-function meter(id, rows, emptyText) {
+function meter(id, rows, emptyText) {  // rows: [label, share or null when locked, right-hand text, tooltip]
   const out = [];
   for (const [label, share, text, title] of rows) {
     const off = share == null, track = h("div", {class: "track", title: title || ""});
@@ -539,226 +336,357 @@ function meter(id, rows, emptyText) {
   $(id).replaceChildren(...(out.length ? out : [h("div", {class: "empty", style: "grid-column:1/-1"}, emptyText || "Nothing yet.")]));
 }
 
-function summary(d) {
-  const t = d.tele, f = d.funnel || {}, runs = d.runs.find(r => r.run_id === $("run").value);
+/* ======================= state ======================= */
+let D = null, ROWS = [], BYID = new Map(), selected = null, firstLoad = true;
+const F = {score: null, trades: null, market: null, fams: new Set(), group: null};  // the filters
+const open = new Set();  // expanded groups in the table
+const isScored = r => r.status === "ok";
+const V = {  // what each numeric filter measures
+  score: r => r.timing_sharpe,
+  trades: r => Math.log10(Math.max(r.trades_per_symbol || 1, 1)),
+  market: r => r.mean_position ?? 0,
+};
+function passes(r, except) {
+  if (F.group != null && r.group !== F.group) return false;
+  if (F.fams.size && !F.fams.has(r.family || "none")) return false;
+  for (const k of ["score", "trades", "market"]) {
+    if (k === except || !F[k]) continue;
+    if (!isScored(r)) return false;
+    const v = V[k](r);
+    if (v < F[k][0] || v > F[k][1]) return false;
+  }
+  return true;
+}
+const anyRange = () => !!(F.score || F.trades || F.market);
+
+/* ======================= overview ======================= */
+function overview(d) {
+  const t = d.tele, f = d.funnel || {}, run = d.runs.find(r => r.run_id === $("run").value);
   if (!t) {
     $("verdict").textContent = "No attempts have been logged yet.";
     $("verdict-why").textContent = "Start a run with: python generate.py --ideas ideas.txt";
     $("meta").textContent = ""; $("tiles").replaceChildren();
-    return;
-  }
-  const n = t.span.scored, best = f.best, luck = t.luck;
-  $("meta").textContent = [runs ? `${runs.run_id}, ${runs.pilot ? "a pilot run that does not count toward the trial count" : "an official run"}` : "All runs together",
-    t.span.model || "hand-written strategies", t.span.prompts ? "prompts " + t.span.prompts : null, `${clock(t.span.first)} to ${clock(t.span.last)}`].filter(Boolean).join(" · ");
-  if (n < 2 || best == null) {
-    $("verdict").textContent = "Too few ideas have been backtested to say anything yet.";
-    $("verdict-why").textContent = `${n} backtested so far.`;
   } else {
-    // The comparison is between two numbers the server computed; nothing here is a model's opinion.
-    $("verdict").textContent = best <= luck ? "Nothing in this run beats what luck alone would produce."
-                                            : "The best score is above the luck benchmark. That is a reason to validate it, not evidence that it works.";
-    $("verdict-why").textContent = `The best of ${n.toLocaleString()} backtested ideas scored ${signed(best)}. The best of ${n.toLocaleString()} ideas with no skill at all is expected to score about ${signed(luck)}.`;
+    const n = t.span.scored, best = f.best, luck = t.luck;
+    $("meta").textContent = [run ? `${run.run_id}, ${run.pilot ? "a pilot run that does not count toward the trial count" : "an official run"}` : "",
+      t.span.model || "hand-written strategies", t.span.prompts ? "prompts " + t.span.prompts : null, `${clock(t.span.first)} to ${clock(t.span.last)}`].filter(Boolean).join(" · ");
+    if (n < 2 || best == null) {
+      $("verdict").textContent = "Too few ideas have been backtested to say anything yet.";
+      $("verdict-why").textContent = `${n} backtested so far.`;
+    } else {  // a comparison of two numbers the server computed; nothing here is a model's opinion
+      $("verdict").textContent = best <= luck ? "Nothing in this run beats what luck alone would produce."
+                                              : "The best score is above the luck benchmark. That is a reason to validate it, not evidence that it works.";
+      const rules = new Set(ROWS.filter(r => !r.tries).map(r => r.group)).size;
+      $("verdict-why").textContent = `The best of ${n.toLocaleString()} backtested attempts scored ${signed(best)}. The best of that many with no skill is expected to score about ${signed(luck)}. `
+        + `The run's ${t.span.ideas.toLocaleString()} ideas come down to ${rules.toLocaleString()} distinct rules once near-copies are grouped.`;
+    }
+    const tile = (k, v, note) => h("div", {}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, note));
+    $("tiles").replaceChildren(
+      tile("Attempts", (f.generated || 0).toLocaleString(), `on ${t.span.ideas.toLocaleString()} ideas, up to three tries each`),
+      tile("Backtested", n.toLocaleString(), f.generated ? `${pct(n / f.generated)} of attempts reached a score` : ""),
+      tile("Best timing Sharpe", signed(best), n > 1 ? `luck alone: about ${signed(luck)}` : "in-sample"),
+      tile("Lost to trading fees", n ? pct(t.span.heavy / n) : "–", "of backtested attempts made over 1,000 trades"));
   }
-  const tile = (k, v, note) => h("div", {}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, note));
-  $("tiles").replaceChildren(
-    tile("Attempts", (f.generated || 0).toLocaleString(), `on ${t.span.ideas.toLocaleString()} ideas, up to three tries each`),
-    tile("Backtested", n.toLocaleString(), f.generated ? `${pct(n / f.generated)} of attempts reached a score` : ""),
-    tile("Best timing Sharpe", signed(best), n > 1 ? `luck alone: about ${signed(luck)}` : "in-sample"),
-    tile("Lost to trading fees", n ? pct(t.span.heavy / n) : "–", "of backtested ideas made over 1,000 trades"));
-}
-
-function funnel(d) {
-  const f = d.funnel || {}, n = f.generated || 0, det = d.locks.detector, w = d.week5;
+  const det = d.locks.detector, w = d.week5, N = f.generated || 0;
   const stages = [
-    ["Generated", f.generated],
-    ["Passed the static check", f.static_ok],
-    ["Ran in the sandbox", f.ran],
+    ["Generated", f.generated], ["Passed the static check", f.static_ok], ["Ran in the sandbox", f.ran],
     ["Passed the look-ahead test", det ? f.lookahead_ok : null, "detector not built"],
     ["Scored above zero", det ? f.gate_checked : f.gate_all],
     ["Validation shortlist", w.shortlisted, "locked until generation is frozen"],
     ["Survived the holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened: see results/" : "locked: data not downloaded"],
   ];
   meter("funnel", stages.map(([label, count, why]) => count == null ? [label, null, why, why]
-    : [label, n ? count / n : 0, h("span", {}, String(count), " ", h("small", {}, n ? pct(count / n) : "")), `${label}: ${count} of ${n}`]));
-  const stops = d.tele ? d.tele.statuses.filter(r => r.status !== "ok") : [], total = stops.reduce((sum, r) => sum + r.n, 0);
-  let run = 0;
-  meter("stops", stops.map(r => { run += r.n; return [chip(r.status), r.n / stops[0].n, h("span", {}, String(r.n), " ", h("small", {}, pct(run / total))), `${outcome(r.status)}: ${r.n} of ${total} rejected attempts`]; }), "Nothing has been rejected yet.");
+    : [label, N ? count / N : 0, h("span", {}, String(count), " ", h("small", {}, N ? pct(count / N) : "")), `${label}: ${count} of ${N}`]));
+  const stops = t ? t.statuses.filter(r => r.status !== "ok") : [], total = stops.reduce((a, r) => a + r.n, 0);
+  let run2 = 0;
+  meter("stops", stops.map(r => { run2 += r.n; return [chip(r.status), r.n / stops[0].n, h("span", {}, String(r.n), " ", h("small", {}, pct(run2 / total))), `${outcome(r.status)}: ${r.n} of ${total}`]; }), "Nothing has been rejected yet.");
 }
 
-function activity(d) {
-  const t = d.tele, f = d.funnel || {};
-  if (!t) { $("pace").replaceChildren(h("div", {class: "empty"}, "Nothing yet.")); meter("llm", []); return; }
-  const values = t.pace.map(p => p.n), W = 560, H = 120, B = 20, top = Math.max(...values), w = W / values.length;
-  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Attempts logged in each five-minute interval"});
-  g.append(s("line", {x1: 0, x2: W, y1: H - B, y2: H - B, stroke: "var(--axis)"}));
-  values.forEach((v, i) => {
-    const bh = Math.max(1, v / top * (H - B - 6)), bw = Math.max(1, w - 2), r = Math.min(3, bw / 2, bh);
-    const bar = s("path", {d: `M${i * w + 1} ${H - B}v${-(bh - r)}q0 ${-r} ${r} ${-r}h${bw - 2 * r}q${r} 0 ${r} ${r}v${bh - r}z`, fill: "var(--s1)"});
-    bar.append(s("title", {}, `${clock(t.pace[i].t)}: ${v} attempts`)); g.append(bar);
-  });
-  g.append(s("text", {x: 0, y: H - 5}, clock(t.pace[0].t)), s("text", {x: W, y: H - 5, "text-anchor": "end"}, clock(t.pace[t.pace.length - 1].t)));
-  $("pace").replaceChildren(g);
-  const hours = Math.max((new Date(t.span.last) - new Date(t.span.first)) / 36e5, 1 / 60);
-  $("pace-n").replaceChildren(h("b", {}, String(Math.round(f.generated / hours))), " an hour");
-  const secs = t.llm.reduce((sum, r) => sum + (r.seconds || 0), 0) || 1;
-  meter("llm", t.llm.map(r => [r.role[0].toUpperCase() + r.role.slice(1), r.seconds / secs, h("span", {}, pct(r.seconds / secs), " ", h("small", {}, `${r.calls} calls`)),
-    `${r.role}: ${r.calls} calls, ${(r.seconds / 60).toFixed(1)} minutes, ${big(r.tokens || 0)} tokens written`]), "No model calls logged.");
-  $("llm-n").replaceChildren(...(t.llm.length ? [h("b", {}, (secs / 3600).toFixed(1) + " hours"), " in total"] : []));
-}
-
-function ranges(d) {
-  const fams = d.tele ? d.tele.families.filter(r => r.scored) : [];
-  if (!fams.length) return $("ranges").replaceChildren(h("div", {class: "empty"}, "No backtested attempts yet."));
-  const luck = d.tele.luck, W = 560, L = 150, R = 18, T = 22, ROW = 27, H = T + fams.length * ROW + 22;
-  const lo = Math.max(-6, Math.floor(Math.min(0, ...fams.map(r => r.median)))), hi = Math.max(2, Math.ceil(Math.max(luck, ...fams.map(r => r.best))));
-  const X = v => L + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - L - R);
-  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Median and best timing Sharpe for each strategy family"});
-  for (let v = lo; v <= hi; v++) {
-    g.append(s("line", {x1: X(v), x2: X(v), y1: T, y2: H - 20, stroke: v ? "var(--grid)" : "var(--axis)"}));
-    g.append(s("text", {x: X(v), y: H - 6, "text-anchor": "middle", class: v ? "" : "lab"}, v ? signed(v).replace(".00", "") : "0"));
-  }
-  if (d.tele.span.scored > 1) {
-    g.append(s("line", {x1: X(luck), x2: X(luck), y1: T - 6, y2: H - 20, stroke: "var(--ink2)", "stroke-dasharray": "4 3"}));
-    g.append(s("text", {x: X(luck), y: T - 10, "text-anchor": "middle", class: "lab"}, "luck " + signed(luck)));
-  }
-  fams.forEach((r, i) => {
-    const y = T + i * ROW + ROW / 2;
-    g.append(s("text", {x: L - 14, y: y + 4, "text-anchor": "end", class: "lab"}, `${plain(r.family)} (${r.scored})`));
-    g.append(s("line", {x1: X(r.median), x2: X(r.best), y1: y, y2: y, stroke: "var(--s1)", "stroke-width": 2}));
-    if (r.median < lo) g.append(s("text", {x: X(lo) - 4, y: y + 4, "text-anchor": "end"}, "◂"));
-    g.append(s("circle", {cx: X(r.median), cy: y, r: 5, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2}));
-    g.append(s("circle", {cx: X(r.best), cy: y, r: 5, fill: "var(--surface)", stroke: "var(--s1)", "stroke-width": 2}));
-    const hit = s("rect", {x: 0, y: y - ROW / 2, width: W, height: ROW, fill: "transparent"});
-    hit.append(s("title", {}, `${plain(r.family)}: median ${signed(r.median)}, best ${signed(r.best)}, ${r.scored} backtested of ${r.n} attempts`));
-    g.append(hit);
-  });
-  $("ranges").replaceChildren(g);
-}
-
-function lessons(d) {
-  if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first one comes after 20 attempts."));
-  const one = note => {
-    const box = h("div", {class: "notes"}, h("h3", {}, `After attempt #${note.after_attempt}`));
-    for (const line of note.text.split("\n")) {  // stored as "Worked: a | b" lines
-      const cut = line.indexOf(":");
-      if (cut < 0) continue;
-      box.append(h("b", {}, {Worked: "What worked", Failed: "What failed", Next: "What to try next"}[line.slice(0, cut).trim()] || line.slice(0, cut).trim()),
-                 h("ul", {}, ...line.slice(cut + 1).split(" | ").map(item => h("li", {}, item.trim()))));
-    }
-    return box;
-  };
-  const [latest, ...older] = d.lessons;
-  $("lessons").replaceChildren(one(latest), ...(older.length ? [h("details", {}, h("summary", {}, `Earlier notes (${older.length})`), ...older.map(one))] : []));
-}
-
-function hist(d) {
-  const xs = d.scores.filter(x => x != null);
-  if (!xs.length) return $("hist").replaceChildren(h("div", {class: "empty"}, "No backtested attempts yet."));
-  const step = 0.25, W = 560, H = 230, L = 30, R = 8, T = 24, B = 26;
-  const lo = Math.min(-1, Math.floor(Math.min(...xs) / step) * step), hi = Math.max(1, Math.ceil((Math.max(...xs) + 1e-9) / step) * step);
-  const bins = Array(Math.round((hi - lo) / step)).fill(0);
-  for (const x of xs) bins[Math.min(bins.length - 1, Math.floor((x - lo) / step))]++;
-  const top = Math.max(...bins), X = v => L + (v - lo) / (hi - lo) * (W - L - R), Y = c => H - B - c / top * (H - T - B);
-  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Histogram of timing Sharpe across backtested attempts"});
-  for (const c of [...new Set([0, Math.ceil(top / 2), top])]) {
-    g.append(s("line", {x1: L, x2: W - R, y1: Y(c), y2: Y(c), stroke: c ? "var(--grid)" : "var(--axis)"}));
-    g.append(s("text", {x: L - 6, y: Y(c) + 4, "text-anchor": "end"}, String(c)));
-  }
-  bins.forEach((c, i) => {
-    if (!c) return;
-    const a = lo + i * step, x = X(a) + 0.5, w = Math.max(1, X(a + step) - X(a) - 1), y = Y(c), r = Math.min(3, w / 2);
-    const bar = s("path", {d: `M${x} ${H - B}V${y + r}q0-${r} ${r}-${r}h${w - 2 * r}q${r} 0 ${r} ${r}V${H - B}z`, fill: "var(--s1)"});
-    bar.append(s("title", {}, `${a.toFixed(2)} to ${(a + step).toFixed(2)}: ${c} attempt${c > 1 ? "s" : ""}`));
-    g.append(bar);
-  });
-  const every = (hi - lo) > 12 ? 2 : (hi - lo) > 6 ? 1 : 0.5;
-  for (let v = Math.ceil(lo / every) * every; v <= hi + 1e-9; v += every)
-    g.append(s("text", {x: X(v), y: H - 8, "text-anchor": "middle", class: Math.abs(v) < 1e-9 ? "lab" : ""}, minus(v.toFixed(every < 1 ? 1 : 0))));
-  g.append(s("line", {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: "var(--axis)"}));
-  if (d.tele && d.tele.span.scored > 1) {  // the score the best of this many no-skill strategies is expected to reach
-    const luck = d.tele.luck;
-    g.append(s("line", {x1: X(luck), x2: X(luck), y1: T - 6, y2: H - B, stroke: "var(--ink2)", "stroke-dasharray": "4 3"}));
-    g.append(s("text", {x: X(luck), y: T - 10, "text-anchor": "middle", class: "lab"}, "luck " + signed(luck)));
-  }
-  $("hist").replaceChildren(g);
-}
-
-function table(d) {
-  const want = $("filter").value, shown = d.attempts.filter(a => !want || a.status === want);
-  if ($("order").value === "best") shown.sort((x, y) => (y.timing_sharpe ?? -Infinity) - (x.timing_sharpe ?? -Infinity));
-  $("count").textContent = `Showing ${shown.length.toLocaleString()} of ${d.attempts.length.toLocaleString()} attempts${d.attempts.length === 1000 ? " (the newest 1,000)" : ""}. Select a row to see its idea, code and equity curve.`;
-  $("rows").replaceChildren(...shown.map(a => {
-    const tr = h("tr", {"aria-selected": a.id === selected ? "true" : "false", tabindex: 0, "data-id": a.id},
-      h("td", {}, String(a.id), a.tries ? h("span", {class: "tag"}, ` retry ${a.tries}`) : ""),
-      h("td", {}, clock(a.created_at)),
-      h("td", {}, a.family ? plain(a.family) : "–"),
-      h("td", {class: "idea", title: a.hypothesis || ""}, a.hypothesis || ""),
-      h("td", {}, chip(a.status)),
-      h("td", {class: "r"}, signed(a.timing_sharpe)),
-      h("td", {class: "r"}, signed(a.net_sharpe)),
-      h("td", {class: "r"}, a.trades_per_symbol == null ? "–" : Math.round(a.trades_per_symbol).toLocaleString()));
-    tr.onclick = () => show(a.id);
-    tr.onkeydown = e => { if (e.key === "Enter") show(a.id); };
-    return tr;
+/* ======================= compare ======================= */
+const SLOT = ["--s1", "--s2", "--s3"], picked = [];
+const cache = new Map();
+function pickList(d) {
+  $("pick").replaceChildren(...d.runs.filter(r => r.run_id !== "baselines").map(r => {
+    const box = h("input", {type: "checkbox", value: r.run_id});
+    box.checked = picked.includes(r.run_id);
+    box.disabled = !box.checked && picked.length >= 3;
+    box.onchange = () => {
+      if (box.checked) picked.push(r.run_id); else picked.splice(picked.indexOf(r.run_id), 1);
+      pickList(D); compare();
+    };
+    const i = picked.indexOf(r.run_id);
+    return h("label", {}, box, ...(i >= 0 ? [h("i", {style: `background:var(${SLOT[i]})`})] : []), `${r.run_id} (${r.n})`);
   }));
-  if (!shown.length) $("rows").append(h("tr", {}, h("td", {colspan: 8, class: "empty"}, d.attempts.length ? "No attempts with this outcome." : "No attempts logged yet. Start one with: python generate.py --ideas ideas.txt")));
+}
+async function compare() {
+  $("compare").hidden = picked.length < 2;
+  if (picked.length < 2) return;
+  const states = await Promise.all(picked.map(async run => {
+    if (!cache.has(run)) cache.set(run, await (await fetch("/api/state?run=" + encodeURIComponent(run))).json());
+    return cache.get(run);
+  }));
+  const metrics = states.map(d => {
+    const t = d.tele, f = d.funnel, n = t.span.scored, by = Object.fromEntries(t.statuses.map(x => [x.status, x.n]));
+    const hours = Math.max((new Date(t.span.last) - new Date(t.span.first)) / 36e5, 1 / 60);
+    return {
+      "Prompts": t.span.prompts || "–",
+      "Attempts": f.generated.toLocaleString(),
+      "Attempts an hour": Math.round(f.generated / hours).toLocaleString(),
+      "Ideas": t.span.ideas.toLocaleString(),
+      "Distinct rules": new Set(d.attempts.filter(r => !r.tries).map(r => r.group)).size.toLocaleString(),
+      "Backtested": pct(n / f.generated),
+      "Never traded": pct((by.no_trades || 0) / f.generated),
+      "Crashed or timed out": pct(((by.crash || 0) + (by.timeout || 0) + (by.bad_output || 0)) / f.generated),
+      "Over 1,000 trades": n ? pct(t.span.heavy / n) : "–",
+      "Median score": signed(t.span.median),
+      "Best score": signed(f.best),
+      "Luck benchmark": signed(t.luck),
+    };
+  });
+  $("cmp-head").replaceChildren(h("tr", {}, h("th", {}, ""), ...picked.map((r, i) =>
+    h("th", {}, h("span", {class: "chip"}, h("i", {style: `display:inline-block;width:10px;height:10px;border-radius:50%;background:var(${SLOT[i]})`}), r)))));
+  $("cmp-body").replaceChildren(...Object.keys(metrics[0]).map(k => h("tr", {}, h("td", {}, k), ...metrics.map(m => h("td", {}, m[k])))));
+  ecdf(states);
+}
+function ecdf(states) {
+  const W = 560, H = 250, L = 38, R = 16, T = 10, B = 28, lo = -4, hi = 2.5;
+  const X = v => L + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - L - R), Y = p => T + (1 - p) * (H - T - B);
+  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Cumulative share of backtested attempts by timing Sharpe, one line per run"});
+  for (const p of [0, .25, .5, .75, 1]) {
+    g.append(s("line", {x1: L, x2: W - R, y1: Y(p), y2: Y(p), stroke: p ? "var(--grid)" : "var(--axis)"}));
+    g.append(s("text", {x: L - 6, y: Y(p) + 4, "text-anchor": "end"}, pct(p)));
+  }
+  for (let v = lo; v <= hi; v++) g.append(s("text", {x: X(v), y: H - 8, "text-anchor": "middle", class: v ? "" : "lab"}, v ? minus(String(v)) : "0"));
+  g.append(s("line", {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: "var(--axis)"}));
+  const lines = states.map((d, i) => {
+    const xs = d.attempts.filter(isScored).map(r => r.timing_sharpe).sort((a, b) => a - b);
+    let path = `M${X(lo)} ${Y(0)}`;
+    xs.forEach((v, k) => { path += `H${X(v).toFixed(1)}V${Y((k + 1) / xs.length).toFixed(1)}`; });
+    path += `H${X(hi)}`;
+    g.append(s("path", {d: path, fill: "none", stroke: `var(${SLOT[i]})`, "stroke-width": 2}));
+    return xs;
+  });
+  const cross = s("line", {y1: T, y2: H - B, stroke: "var(--ink2)", "stroke-dasharray": "3 3", visibility: "hidden"});
+  const hit = s("rect", {x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent"});
+  g.append(cross, hit);
+  const tip = h("div", {class: "tip"}), wrap = h("div", {class: "chart"}, g, tip);
+  hit.onpointermove = e => {
+    const r = hit.getBoundingClientRect(), v = lo + (e.clientX - r.left) / r.width * (hi - lo);
+    cross.setAttribute("x1", X(v)); cross.setAttribute("x2", X(v)); cross.setAttribute("visibility", "visible");
+    tip.replaceChildren(h("b", {}, `Score at or below ${signed(v)}`), ...lines.flatMap((xs, i) => [h("br"), h("span", {}, picked[i] + " "), pct(xs.filter(x => x <= v).length / (xs.length || 1))]));
+    const br = wrap.getBoundingClientRect(), left = e.clientX - br.left;
+    tip.style.display = "block"; tip.style.top = "6px";
+    tip.style.left = (left > br.width / 2 ? left - tip.offsetWidth - 12 : left + 12) + "px";
+  };
+  hit.onpointerleave = () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); };
+  $("ecdf").replaceChildren(wrap);
+  $("ecdf-legend").replaceChildren(...picked.map((r, i) => h("span", {}, h("i", {class: "line", style: `background:var(${SLOT[i]})`}), r)));
 }
 
-function equityChart(eq, bench) {
-  const W = 560, H = 230, L = 34, R = 104, T = 10, B = 24, n = eq.length;
-  const b = bench.equity.slice(0, n), all = eq.concat(b);
-  const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 0.1;
-  const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (hi + pad - v) / (hi - lo + 2 * pad) * (H - T - B);
-  const line = ys => ys.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join("");
-  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Equity of this strategy against buy-and-hold over the discovery period"});
-  const stepY = [0.25, 0.5, 1, 2, 5, 10, 20, 50].find(k => (hi - lo) / k <= 6) || 100;
-  for (let v = Math.ceil(lo / stepY) * stepY; v <= hi; v += stepY) {
-    g.append(s("line", {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--grid)"}));
-    g.append(s("text", {x: L - 6, y: Y(v) + 4, "text-anchor": "end"}, v + "×"));
-  }
-  bench.dates.slice(0, n).forEach((dt, i) => {
-    if (i && dt.slice(0, 4) !== bench.dates[i - 1].slice(0, 4)) g.append(s("text", {x: X(i), y: H - 7, "text-anchor": "middle"}, dt.slice(0, 4)));
-  });
-  g.append(s("path", {d: line(b), fill: "none", stroke: "var(--s2)", "stroke-width": 2, "stroke-linejoin": "round"}));
-  g.append(s("path", {d: line(eq), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round"}));
-  let ys = Y(eq[n - 1]), yb = Y(b[n - 1]);
-  if (Math.abs(ys - yb) < 13) { const mid = (ys + yb) / 2, up = ys <= yb; ys = mid + (up ? -7 : 7); yb = mid + (up ? 7 : -7); }
-  g.append(s("text", {x: W - R + 8, y: ys + 4, class: "lab"}, `Strategy ${eq[n - 1].toFixed(2)}×`));
-  g.append(s("text", {x: W - R + 8, y: yb + 4, class: "lab"}, `Buy & hold ${b[n - 1].toFixed(2)}×`));
-  const cross = s("line", {y1: T, y2: H - B, stroke: "var(--axis)", visibility: "hidden"});
-  const dotS = s("circle", {r: 4, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden"});
-  const dotB = s("circle", {r: 4, fill: "var(--s2)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden"});
-  const hit = s("rect", {x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent"});
-  g.append(cross, dotB, dotS, hit);
-  const tip = h("div", {class: "tip"});
-  const wrap = h("div", {class: "chart"}, g, tip);
-  hit.onpointermove = e => {
-    const r = hit.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round((e.clientX - r.left) / r.width * (n - 1))));
-    for (const el of [cross, dotS, dotB]) el.setAttribute("visibility", "visible");
-    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
-    dotS.setAttribute("cx", X(i)); dotS.setAttribute("cy", Y(eq[i]));
-    dotB.setAttribute("cx", X(i)); dotB.setAttribute("cy", Y(b[i]));
-    tip.replaceChildren(h("b", {}, bench.dates[i] || ""), h("br"), h("span", {}, "Strategy "), `${eq[i].toFixed(2)}×`, h("br"), h("span", {}, "Buy & hold "), `${b[i].toFixed(2)}×`);
-    const br = wrap.getBoundingClientRect(), left = e.clientX - br.left;
-    tip.style.display = "block";
-    tip.style.left = (left > br.width / 2 ? left - tip.offsetWidth - 12 : left + 12) + "px";
-    tip.style.top = "8px";
+/* ======================= filters ======================= */
+const HIST = {
+  score:  {el: "h-score",  title: "Timing Sharpe", lo: -5, hi: 2.5, tick: v => v ? minus(String(v)) : "0", ticks: [-5, -4, -3, -2, -1, 0, 1, 2], show: v => signed(v)},
+  trades: {el: "h-trades", title: "Trades per symbol", lo: 0, hi: 4.5, tick: v => (10 ** v).toLocaleString(), ticks: [1, 2, 3, 4], show: v => Math.round(10 ** v).toLocaleString()},
+  market: {el: "h-market", title: "Time in the market", lo: 0, hi: 1, tick: v => pct(v), ticks: [0, .25, .5, .75, 1], show: v => pct(v)},
+};
+function brush(svg, toValue, onDone, rectFor) {
+  // Drag to choose a range; a click without a drag clears it. The range is applied on release.
+  svg.classList.add("brushable");
+  let start = null, box = null;
+  const pt = e => { const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height]; };
+  svg.onpointerdown = e => { start = pt(e); svg.setPointerCapture(e.pointerId); box = rectFor(start, start); svg.append(box); };
+  svg.onpointermove = e => { if (!start) return; const b = rectFor(start, pt(e)); for (const a of ["x", "y", "width", "height"]) box.setAttribute(a, b.getAttribute(a)); };
+  svg.onpointerup = e => {
+    if (!start) return;
+    const end = pt(e), moved = Math.abs(end[0] - start[0]) + Math.abs(end[1] - start[1]) > 4;
+    onDone(moved ? toValue(start, end) : null);
+    start = null; box.remove();
   };
-  hit.onpointerleave = () => { tip.style.display = "none"; for (const el of [cross, dotS, dotB]) el.setAttribute("visibility", "hidden"); };
-  return h("div", {},
-    h("div", {class: "legend", style: "margin-bottom:8px"}, h("span", {}, h("i", {class: "line", style: "background:var(--s1)"}), "This strategy, after fees"), h("span", {}, h("i", {class: "line", style: "background:var(--s2)"}), "Buy and hold")),
-    wrap);
+}
+function histogram(key, scored) {
+  const c = HIST[key], W = 420, H = 92, L = 6, R = 6, T = 4, B = 20, NB = 30;
+  const X = v => L + (Math.max(c.lo, Math.min(c.hi, v)) - c.lo) / (c.hi - c.lo) * (W - L - R);
+  const bin = v => Math.max(0, Math.min(NB - 1, Math.floor((v - c.lo) / (c.hi - c.lo) * NB)));
+  const all = Array(NB).fill(0), kept = Array(NB).fill(0);
+  for (const r of scored) { const b = bin(V[key](r)); all[b]++; if (passes(r, key)) kept[b]++; }
+  const top = Math.max(1, ...all), Y = n => H - B - n / top * (H - T - B), w = (W - L - R) / NB;
+  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${c.title}: distribution, drag to filter`});
+  all.forEach((n, i) => {
+    if (!n) return;
+    const x = L + i * w + 1, bw = Math.max(1, w - 2);
+    g.append(s("rect", {x, y: Y(n), width: bw, height: H - B - Y(n), rx: 2, fill: "var(--ghost)"}));
+    if (kept[i]) g.append(s("rect", {x, y: Y(kept[i]), width: bw, height: H - B - Y(kept[i]), rx: 2, fill: "var(--s1)"},
+      s("title", {}, `${c.show(c.lo + i / NB * (c.hi - c.lo))} to ${c.show(c.lo + (i + 1) / NB * (c.hi - c.lo))}: ${kept[i]} of ${n}`)));
+  });
+  g.append(s("line", {x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)"}));
+  for (const v of c.ticks) g.append(s("text", {x: X(v), y: H - 5, "text-anchor": "middle"}, c.tick(v)));
+  if (key === "score" && D.tele && D.tele.span.scored > 1) {
+    g.append(s("line", {x1: X(D.tele.luck), x2: X(D.tele.luck), y1: T, y2: H - B, stroke: "var(--ink2)", "stroke-dasharray": "4 3"}));
+  }
+  if (F[key]) g.append(s("rect", {x: X(F[key][0]), y: T - 2, width: Math.max(2, X(F[key][1]) - X(F[key][0])), height: H - B - T + 2,
+                                  fill: "none", stroke: "var(--accent)", "stroke-width": 1.5, rx: 3}));
+  const inv = x => c.lo + (x - L) / (W - L - R) * (c.hi - c.lo);
+  brush(g, (a, b) => [inv(Math.min(a[0], b[0])), inv(Math.max(a[0], b[0]))], range => { F[key] = range; refilter(); },
+        (a, b) => s("rect", {x: Math.min(a[0], b[0]), y: T, width: Math.abs(b[0] - a[0]), height: H - B - T, fill: "var(--accent)", opacity: .15}));
+  const kids = [h("div", {class: "row"}, h("h3", {}, c.title),
+    h("span", {class: "range"}, F[key] ? `${c.show(F[key][0])} to ${c.show(F[key][1])}` : "all"),
+    ...(F[key] ? [Object.assign(h("button", {class: "link"}, "clear"), {onclick: () => { F[key] = null; refilter(); }})] : [])), g];
+  $(c.el).replaceChildren(...kids);
+}
+function scatter(scored) {
+  const W = 620, H = 380, L = 44, R = 14, T = 12, B = 34, ylo = -5, yhi = 2.5, xlo = 0, xhi = 4.5;
+  const X = v => L + (Math.max(xlo, Math.min(xhi, v)) - xlo) / (xhi - xlo) * (W - L - R);
+  const Y = v => T + (yhi - Math.max(ylo, Math.min(yhi, v))) / (yhi - ylo) * (H - T - B);
+  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Timing Sharpe against trades per symbol for every backtested attempt; drag a box to filter"});
+  g.append(s("rect", {x: L, y: Y(.5), width: W - L - R, height: Y(-.5) - Y(.5), fill: "var(--wash)"}));
+  for (const v of [-5, -4, -3, -2, -1, 0, 1, 2]) {
+    g.append(s("line", {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: v ? "var(--grid)" : "var(--axis)"}));
+    g.append(s("text", {x: L - 6, y: Y(v) + 4, "text-anchor": "end", class: v ? "" : "lab"}, v ? minus(String(v)) : "0"));
+  }
+  for (const v of [1, 2, 3, 4]) {
+    g.append(s("line", {x1: X(v), x2: X(v), y1: T, y2: H - B, stroke: "var(--grid)"}));
+    g.append(s("text", {x: X(v), y: H - 16, "text-anchor": "middle"}, (10 ** v).toLocaleString()));
+  }
+  g.append(s("text", {x: (L + W - R) / 2, y: H - 2, "text-anchor": "middle", class: "lab"}, "trades per symbol (log scale)"));
+  g.append(s("text", {x: 4, y: T - 2, class: "lab"}, "timing Sharpe"));
+  if (D.tele && D.tele.span.scored > 1) {
+    g.append(s("line", {x1: L, x2: W - R, y1: Y(D.tele.luck), y2: Y(D.tele.luck), stroke: "var(--ink2)", "stroke-dasharray": "4 3"}));
+    g.append(s("text", {x: W - R, y: Y(D.tele.luck) - 4, "text-anchor": "end", class: "lab"}, "luck " + signed(D.tele.luck)));
+  }
+  const pts = scored.map(r => ({r, x: X(V.trades(r)), y: Y(r.timing_sharpe), on: passes(r)}));
+  for (const p of pts.filter(p => !p.on)) g.append(s("circle", {cx: p.x, cy: p.y, r: 3, fill: "var(--axis)"}));
+  for (const p of pts.filter(p => p.on)) g.append(s("circle", {cx: p.x, cy: p.y, r: 3.5, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 1}));
+  const sel = pts.find(p => p.r.id === selected);
+  if (sel) g.append(s("circle", {cx: sel.x, cy: sel.y, r: 8, fill: "none", stroke: "var(--accent)", "stroke-width": 2}));
+  if (F.score && F.trades) g.append(s("rect", {x: X(F.trades[0]), y: Y(F.score[1]), width: X(F.trades[1]) - X(F.trades[0]), height: Y(F.score[0]) - Y(F.score[1]),
+                                            fill: "none", stroke: "var(--accent)", "stroke-width": 1.5, rx: 3}));
+  const invX = x => xlo + (x - L) / (W - L - R) * (xhi - xlo), invY = y => yhi - (y - T) / (H - T - B) * (yhi - ylo);
+  brush(g, (a, b) => [[invX(Math.min(a[0], b[0])), invX(Math.max(a[0], b[0]))], [invY(Math.max(a[1], b[1])), invY(Math.min(a[1], b[1]))]],
+        box => {
+          if (box) { F.trades = box[0]; F.score = box[1]; refilter(); return; }
+          const near = nearest(lastPt);  // a click: select the nearest point, if any
+          if (near) show(near.r.id);
+        },
+        (a, b) => s("rect", {x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), fill: "var(--accent)", opacity: .12}));
+  let lastPt = null;
+  const tip = h("div", {class: "tip"}), wrap = h("div", {class: "chart"}, g, tip);
+  const nearest = q => { if (!q) return null; let best = null, bd = 12 * 12; for (const p of pts) { const d = (p.x - q[0]) ** 2 + (p.y - q[1]) ** 2; if (d < bd) { bd = d; best = p; } } return best; };
+  g.addEventListener("pointermove", e => {
+    const r = g.getBoundingClientRect(), vb = g.viewBox.baseVal;
+    lastPt = [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height];
+    const p = nearest(lastPt);
+    if (!p || e.buttons) { tip.style.display = "none"; return; }
+    tip.replaceChildren(h("b", {}, `#${p.r.id} · ${plain(p.r.family)}`), h("br"),
+      h("span", {}, `timing ${signed(p.r.timing_sharpe)} · ${Math.round(p.r.trades_per_symbol)} trades · in market ${pct(p.r.mean_position)}`),
+      h("span", {class: "idea"}, (p.r.hypothesis || "").slice(0, 160)));
+    const br = wrap.getBoundingClientRect(), px = e.clientX - br.left, py = e.clientY - br.top;
+    tip.style.display = "block";
+    tip.style.left = (px > br.width / 2 ? px - tip.offsetWidth - 14 : px + 14) + "px";
+    tip.style.top = Math.max(4, py - 20) + "px";
+  });
+  g.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+  $("scatter").replaceChildren(wrap);
+}
+function families() {
+  const fams = [...new Set(ROWS.map(r => r.family || "none"))].sort();
+  $("fam").replaceChildren(...fams.map(f => {
+    const b = h("button", {"aria-pressed": F.fams.has(f) ? "true" : "false"}, `${plain(f)} ${ROWS.filter(r => (r.family || "none") === f && !r.tries).length}`);
+    b.onclick = () => { F.fams.has(f) ? F.fams.delete(f) : F.fams.add(f); refilter(); };
+    return b;
+  }));
+}
+function refilter() {
+  const scored = ROWS.filter(isScored);
+  for (const k of Object.keys(HIST)) histogram(k, scored);
+  scatter(scored);
+  families();
+  const kept = scored.filter(r => passes(r));
+  const parts = [h("span", {}, h("b", {}, kept.length.toLocaleString()), ` of ${scored.length.toLocaleString()} backtested attempts pass`)];
+  if (kept.length) parts.push(h("span", {}, "best ", h("b", {}, signed(Math.max(...kept.map(r => r.timing_sharpe)))), ", median ", h("b", {}, signed(median(kept.map(r => r.timing_sharpe))))));
+  if (F.group != null) parts.push(h("span", {}, `only the rule group of #${F.group} `, Object.assign(h("button", {class: "link"}, "show all"), {onclick: () => { F.group = null; refilter(); }})));
+  $("status").replaceChildren(...parts);
+  table();
+}
+$("reset").onclick = () => { F.score = F.trades = F.market = null; F.fams.clear(); F.group = null; refilter(); };
+
+/* ======================= table ======================= */
+function table() {
+  const want = $("outcome").value, grouped = $("group").checked;
+  $("rows").closest("table").classList.toggle("one-outcome", !!want);  // the column would say the same thing on every row
+  const rows = ROWS.filter(r => (!want || r.status === want) && passes(r));
+  const score = r => r.timing_sharpe ?? -Infinity;
+  let blocks;
+  if (grouped) {
+    const by = new Map();
+    for (const r of rows) (by.get(r.group) || by.set(r.group, []).get(r.group)).push(r);
+    blocks = [...by.values()].map(m => m.sort((a, b) => score(b) - score(a)));
+  } else blocks = rows.map(r => [r]);
+  const order = $("order").value;
+  blocks.sort(order === "count" ? (a, b) => b.length - a.length || score(b[0]) - score(a[0])
+            : order === "new" ? (a, b) => Math.max(...b.map(r => r.id)) - Math.max(...a.map(r => r.id))
+            : (a, b) => score(b[0]) - score(a[0]));
+  const ideas = new Set(rows.filter(r => !r.tries).map(r => r.group)).size;
+  $("count").textContent = `${rows.length.toLocaleString()} attempts${grouped ? ` in ${blocks.length.toLocaleString()} groups of near-copies (one rule with a filter or window changed)` : ""}${blocks.length > 300 ? ", first 300 shown" : ""}. Select a row to inspect it.`;
+  const line = (r, member, size, members) => {
+    const tr = h("tr", {class: member ? "member" : "", "aria-selected": r.id === selected ? "true" : "false", tabindex: 0, "data-id": r.id},
+      h("td", {}, ...(size > 1 && !member ? [Object.assign(h("button", {class: "expand", "aria-expanded": open.has(r.group) ? "true" : "false", title: "Show the group's members"}, open.has(r.group) ? "▾" : "▸"),
+        {onclick: e => { e.stopPropagation(); open.has(r.group) ? open.delete(r.group) : open.add(r.group); table(); }}), h("span", {class: "count", title: `${size} attempts in this group`}, "×" + size)] : []),
+        String(r.id), r.tries ? h("span", {class: "tag"}, ` retry ${r.tries}`) : ""),
+      h("td", {}, r.family ? plain(r.family) : "–"),
+      h("td", {class: "idea", title: r.hypothesis || ""}, h("span", {}, (r.hypothesis || "").replace(/^Enter when /, ""))),
+      h("td", {}, chip(r.status)),
+      h("td", {class: "r", title: size > 1 && !member ? `median of the group: ${signed(median(members.filter(isScored).map(x => x.timing_sharpe)))}` : ""}, signed(r.timing_sharpe)),
+      h("td", {class: "r"}, r.trades_per_symbol == null ? "–" : Math.round(r.trades_per_symbol).toLocaleString()),
+      h("td", {class: "r"}, pct(r.mean_position)));
+    tr.onclick = () => show(r.id);
+    tr.onkeydown = e => { if (e.key === "Enter") show(r.id); };
+    return tr;
+  };
+  const out = [];
+  for (const m of blocks.slice(0, 300)) {
+    out.push(line(m[0], false, m.length, m));
+    if (m.length > 1 && open.has(m[0].group)) for (const r of m.slice(1)) out.push(line(r, true, m.length, m));
+  }
+  $("rows").replaceChildren(...(out.length ? out : [h("tr", {}, h("td", {colspan: 7, class: "empty"}, ROWS.length ? "Nothing passes these filters." : "No attempts logged yet."))]));
+}
+$("group").onchange = $("order").onchange = $("outcome").onchange = () => table();
+
+/* ======================= inspect ======================= */
+function lineage(a) {
+  const ideaOf = r => { let k = r; while (k && k.tries) k = BYID.get(k.id - 1); return k || r; };  // a retry's idea is the attempt before it with tries = 0
+  const parentOf = r => { const i = ideaOf(r), ref = i.parent_id ?? (i.refs || [])[0]; return ref != null && BYID.has(ref) ? ideaOf(BYID.get(ref)) : null; };
+  const me = ideaOf(a), up = [];
+  for (let p = parentOf(me); p && up.length < 3 && !up.includes(p); p = parentOf(p)) up.unshift(p);
+  const kids = ROWS.filter(r => !r.tries && r.id !== me.id && (r.parent_id === me.id || (r.refs || []).includes(me.id) || (r.refs || []).includes(a.id))).sort((x, y) => x.id - y.id);
+  const btn = (r, here) => Object.assign(h("button", {class: here ? "here" : "", title: (r.hypothesis || "").slice(0, 200)}, `#${r.id} ${signed(bestOf(r))}`), {onclick: () => show(r.id)});
+  const chain = h("div", {class: "lineage"});
+  for (const p of up) chain.append(btn(p), h("span", {class: "arrow"}, "→"));
+  chain.append(btn(me, true));
+  if (kids.length) chain.append(h("span", {class: "arrow"}, "→"), ...kids.slice(0, 8).map(k => btn(k)), ...(kids.length > 8 ? [h("span", {class: "tag"}, `and ${kids.length - 8} more`)] : []));
+  const group = ROWS.filter(r => r.group === a.group && !r.tries);
+  const gBest = Math.max(...ROWS.filter(r => r.group === a.group && isScored(r)).map(r => r.timing_sharpe), -Infinity);
+  return h("div", {class: "block"}, h("h3", {}, "Where the idea came from"),
+    h("p", {class: "sub", style: "margin:2px 0 8px"}, up.length || kids.length ? "Earlier ideas it was built on, then later ideas built on it. Each shows its best score after retries." : "Not built on another attempt, and nothing was built on it."),
+    chain,
+    h("p", {class: "sub", style: "margin:10px 0 0"}, group.length > 1 ? `${group.length} ideas in this run are near-copies of it (best ${signed(gBest === -Infinity ? null : gBest)}). ` : "No near-copies of it in this run. ",
+      ...(group.length > 1 ? [Object.assign(h("button", {class: "link"}, "Show only them"), {onclick: () => { F.group = a.group; refilter(); }})] : [])));
+}
+function bestOf(idea) {  // the best score among an idea and its retries
+  let best = null;
+  for (let k = idea.id; BYID.has(k) && (k === idea.id || BYID.get(k).tries); k++) { const r = BYID.get(k); if (isScored(r) && (best == null || r.timing_sharpe > best)) best = r.timing_sharpe; }
+  return best;
 }
 
 async function show(id) {
-  selected = id; stage.dirty = true; picked();
+  selected = id;
   for (const tr of $("rows").children) tr.setAttribute("aria-selected", tr.dataset.id === String(id) ? "true" : "false");
   const res = await fetch("/api/attempt/" + id);
-  if (!res.ok) return;
+  if (!res.ok || selected !== id) return;
   const {attempt: a, benchmark} = await res.json();
+  const row = BYID.get(id) || a;
   const kids = [
-    h("div", {class: "row"}, h("h3", {}, `Attempt #${a.id} · ${plain(a.family)}`), chip(a.status)),
-    h("p", {class: "sub", style: "margin:0"}, `${a.run_id}${a.pilot ? " (pilot)" : ""} · ${a.model || "hand-written"} · prompts ${a.prompt_version || "–"} · look-ahead test: ${a.lookahead || "not reached"}`),
+    h("div", {class: "row"}, h("h3", {}, `#${a.id} · ${plain(a.family)}`), chip(a.status)),
+    h("p", {class: "sub", style: "margin:0"}, `${a.run_id}${a.pilot ? " (pilot)" : ""} · prompts ${a.prompt_version || "–"} · look-ahead test: ${a.lookahead || "not reached"}`),
     h("p", {class: "idea-text"}, a.hypothesis || ""),
   ];
   if (a.error) kids.push(h("pre", {class: "err"}, a.error));
@@ -769,39 +697,236 @@ async function show(id) {
       dl.append(h("div", {}, h("dt", {}, k), h("dd", {}, v)));
     kids.push(dl);
   }
-  if (a.equity && a.equity.length > 1 && benchmark.equity.length) kids.push(equityChart(a.equity, benchmark));
-  kids.push(h("pre", {}, a.code || "(no code)"));
+  const replayBox = h("div", {class: "block", id: "replay"});
+  kids.push(replayBox);
+  if (BYID.has(id)) kids.push(lineage(row));
+  if (a.equity && a.equity.length > 1 && benchmark.equity.length)
+    kids.push(h("div", {class: "block"}, h("h3", {}, "Growth of 1 on both symbols together"), equityChart(a.equity, benchmark)));
+  kids.push(h("div", {class: "block"}, h("h3", {}, "Code"), h("pre", {}, a.code || "(no code)")));
   $("detail").replaceChildren(...kids);
+  if (D) { const scored = ROWS.filter(isScored); scatter(scored); }
+  replay.load(id, a.status, replayBox);
 }
 
-let curvesKey = null, stateKey = null;
+function equityChart(eq, bench) {
+  const W = 560, H = 200, L = 34, R = 104, T = 10, B = 24, n = eq.length;
+  const b = bench.equity.slice(0, n), all = eq.concat(b);
+  const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 0.1;
+  const X = i => L + i / (n - 1) * (W - L - R), Y = v => T + (hi + pad - v) / (hi - lo + 2 * pad) * (H - T - B);
+  const line = ys => ys.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join("");
+  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Equity of this strategy against buy-and-hold over the discovery period"});
+  const stepY = [0.25, 0.5, 1, 2, 5, 10, 20, 50].find(k => (hi - lo) / k <= 6) || 100;
+  for (let v = Math.ceil(lo / stepY) * stepY; v <= hi; v += stepY) {
+    g.append(s("line", {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--grid)"}));
+    g.append(s("text", {x: L - 6, y: Y(v) + 4, "text-anchor": "end"}, v + "×"));
+  }
+  bench.dates.slice(0, n).forEach((dt, i) => { if (i && dt.slice(0, 4) !== bench.dates[i - 1].slice(0, 4)) g.append(s("text", {x: X(i), y: H - 7, "text-anchor": "middle"}, dt.slice(0, 4))); });
+  g.append(s("path", {d: line(b), fill: "none", stroke: "var(--s2)", "stroke-width": 2, "stroke-linejoin": "round"}));
+  g.append(s("path", {d: line(eq), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round"}));
+  let ys = Y(eq[n - 1]), yb = Y(b[n - 1]);
+  if (Math.abs(ys - yb) < 13) { const mid = (ys + yb) / 2, up = ys <= yb; ys = mid + (up ? -7 : 7); yb = mid + (up ? 7 : -7); }
+  g.append(s("text", {x: W - R + 8, y: ys + 4, class: "lab"}, `Strategy ${eq[n - 1].toFixed(2)}×`));
+  g.append(s("text", {x: W - R + 8, y: yb + 4, class: "lab"}, `Buy & hold ${b[n - 1].toFixed(2)}×`));
+  return g;
+}
+
+/* ======================= replay ======================= */
+// Plays a strategy through the discovery bars: candles appear bar by bar, and every position change is marked.
+// The equity shown is this one symbol's, recomputed with the judge's formula (backtest.py) for display only.
+const replay = (() => {
+  const LC = window.LightweightCharts;
+  let BARS = null, data = null, sym = null, chart = null, candle = null, posS = null, marks = null, host = null;
+  let i = 0, playing = false, speed = 168, carry = 0, live = [], eqS = 1, eqB = 1, trades = 0, raf = 0, attemptId = null;
+  const SPEEDS = [[24, "1 day/s"], [168, "1 week/s"], [720, "1 month/s"], [2190, "1 quarter/s"]];
+  const day = t => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");
+
+  async function load(id, status, box) {
+    stop(); attemptId = id; host = box;
+    box.replaceChildren(h("h3", {}, "Replay its trades"), h("p", {class: "sub", style: "margin:2px 0 0"}, "Running the strategy again in the sandbox…"));
+    if (!LC) return msg("The chart library did not load (it comes from cdn.jsdelivr.net). Check the internet connection and reload.");
+    if (!["ok", "too_few_trades", "duplicate", "no_trades"].includes(status)) return msg("This attempt never produced positions, so there is nothing to replay.");
+    const [bars, pos] = await Promise.all([BARS || fetch("/api/bars").then(r => r.json()), fetch("/api/positions/" + id).then(r => r.json())]);
+    BARS = bars;
+    if (attemptId !== id) return;
+    if (pos.error) return msg(pos.error);
+    data = pos.changes; sym = sym && data[sym] ? sym : Object.keys(data)[0];
+    build();
+  }
+  function msg(text) { host.replaceChildren(h("h3", {}, "Replay its trades"), h("p", {class: "sub", style: "margin:2px 0 0"}, text)); }
+
+  function build() {
+    if (chart) { chart.remove(); chart = null; }
+    const b = BARS[sym], n = b.t.length, p = new Float32Array(n);
+    let k = 0, cur = 0;
+    for (let t = 0; t < n; t++) { if (k < data[sym].length && data[sym][k][0] === t) cur = data[sym][k++][1]; p[t] = cur; }
+    const changes = data[sym].map(([t, v], j) => ({t, v, prev: j ? data[sym][j - 1][1] : 0}));
+    live = {b, n, p, changes};
+
+    const tabs = h("div", {class: "tabs", role: "group", "aria-label": "Symbol"}, ...Object.keys(data).map(sy =>
+      Object.assign(h("button", {"aria-pressed": sy === sym ? "true" : "false"}, sy.replace("USDT", "")), {onclick: () => { stop(); sym = sy; build(); }})));
+    const play = Object.assign(h("button", {id: "play"}, "▶ Play"), {onclick: () => playing ? stop() : start()});
+    const pace = h("select", {"aria-label": "Replay speed"}, ...SPEEDS.map(([v, l]) => h("option", {value: v}, l)));
+    pace.value = speed; pace.onchange = () => { speed = +pace.value; };
+    const scrub = h("input", {type: "range", id: "scrub", min: 0, max: n - 1, value: n - 1, "aria-label": "Position in time"});
+    scrub.oninput = () => { stop(); seek(+scrub.value); };
+    const stage = h("div", {class: "stage"}), fx = h("div", {class: "fx"});
+    const cells = Object.fromEntries(["When", "Position", "Strategy", "Buy & hold", "Trades"].map(k => [k, h("b", {}, "–")]));
+    const log = h("ul", {class: "tradelog", "aria-live": "polite"});
+    host.replaceChildren(h("h3", {}, "Replay its trades"),
+      h("p", {class: "sub", style: "margin:2px 0 0"}, "Each position change on 2019–2022 hourly bars. ▲ below a candle: it bought (position up). ▼ above: it sold (position down). The shaded strip underneath is its position, 0 to 100%."),
+      h("div", {class: "replay-bar"}, tabs, play, pace, scrub), stage,
+      h("div", {class: "readout"}, ...Object.entries(cells).map(([k, v]) => h("div", {}, k, v))), log);
+    stage.append(fx);
+    Object.assign(live, {scrub, play, fx, cells, log, stage});
+
+    chart = LC.createChart(stage, {
+      autoSize: true,
+      layout: {background: {type: LC.ColorType.Solid, color: css("--surface")}, textColor: css("--ink2"), fontFamily: css("--sans"), fontSize: 11, attributionLogo: false},
+      grid: {vertLines: {color: css("--grid")}, horzLines: {color: css("--grid")}},
+      rightPriceScale: {borderColor: css("--axis")},
+      timeScale: {borderColor: css("--axis"), timeVisible: true, rightOffset: 6, minBarSpacing: 0.01},  // the default 0.5px cannot fit four years of hourly bars
+      crosshair: {mode: LC.CrosshairMode.Normal},
+    });
+    // Neutral candles, hollow when up, so the trade markers are what stands out.
+    candle = chart.addSeries(LC.CandlestickSeries, {upColor: "rgba(0,0,0,0)", borderUpColor: css("--ink2"), wickUpColor: css("--ink2"),
+                                                    downColor: css("--muted"), borderDownColor: css("--muted"), wickDownColor: css("--muted"),
+                                                    priceLineVisible: false});
+    posS = chart.addSeries(LC.AreaSeries, {lineColor: css("--s1"), topColor: hexA(css("--s1"), .35), bottomColor: hexA(css("--s1"), .05), lineWidth: 1, lineType: 1,
+                                           priceLineVisible: false, lastValueVisible: false, priceFormat: {type: "percent"}}, 1);
+    chart.panes()[0].setStretchFactor(3); chart.panes()[1].setStretchFactor(1);
+    marks = LC.createSeriesMarkers(candle, []);
+    chart.subscribeCrosshairMove(e => { if (!playing && e.logical != null) readout(Math.max(0, Math.min(n - 1, Math.round(e.logical)))); });
+    seek(n - 1, true);
+  }
+  const hexA = (hex, a) => { const v = parseInt(hex.slice(1), 16); return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${a})`; };
+  const bar = (b, t) => ({time: b.t[t], open: b.o[t], high: b.h[t], low: b.l[t], close: b.c[t]});
+  const marker = c => c.v > c.prev
+    ? {time: live.b.t[c.t], position: "belowBar", shape: "arrowUp", color: css("--s1"), id: String(c.t)}
+    : {time: live.b.t[c.t], position: "aboveBar", shape: "arrowDown", color: css("--s2"), id: String(c.t)};
+
+  function seek(to, fit) {  // draw everything up to bar `to`
+    const {b, p, changes} = live;
+    candle.setData(Array.from({length: to + 1}, (_, t) => bar(b, t)));
+    posS.setData(Array.from({length: to + 1}, (_, t) => ({time: b.t[t], value: p[t] * 100})));
+    marks.setMarkers(changes.filter(c => c.t <= to).map(marker));
+    i = to; equityTo(to); readout(to); live.scrub.value = to;
+    if (fit) requestAnimationFrame(() => chart && chart.timeScale().fitContent());  // after the chart has its size
+  }
+  function equityTo(to) {  // the judge's formula for one symbol: held position earns the next bar, minus the fee on each change
+    const {b, p} = live, fee = D.fee ?? 0.001;
+    eqS = 1; trades = 0;
+    for (let t = 1; t <= to; t++) { const held = p[t - 1], prev = t > 1 ? p[t - 2] : 0; eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - fee * Math.abs(held - prev); if (p[t - 1] !== prev) trades++; }
+    eqB = b.c[to] / b.c[0];
+  }
+  function step(t) {
+    const {b, p} = live, fee = D.fee ?? 0.001;
+    if (t > 0) { const held = p[t - 1], prev = t > 1 ? p[t - 2] : 0; eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - fee * Math.abs(held - prev); if (held !== prev) trades++; }
+    eqB = b.c[t] / b.c[0];
+  }
+  function readout(t) {
+    const {b, p, cells} = live;
+    cells["When"].textContent = day(b.t[t]) + " UTC";
+    cells["Position"].textContent = pct(p[t]);
+    cells["Strategy"].textContent = eqS.toFixed(2) + "×";
+    cells["Buy & hold"].textContent = eqB.toFixed(2) + "×";
+    cells["Trades"].textContent = String(trades);
+  }
+
+  function start() {
+    if (!chart) return;
+    if (i >= live.n - 1) { i = 0; live.log.replaceChildren(); }
+    seek(i);
+    chart.timeScale().setVisibleLogicalRange({from: i - Math.max(240, speed * 4), to: i + 10});
+    playing = true; carry = 0; live.play.textContent = "❚❚ Pause";
+    let last = performance.now();
+    const tick = now => {
+      if (!playing) return;
+      carry += speed * Math.min(0.1, (now - last) / 1000); last = now;
+      const {b, p, n, changes} = live;
+      while (carry >= 1 && i < n - 1) {
+        carry--; i++;
+        candle.update(bar(b, i)); posS.update({time: b.t[i], value: p[i] * 100}); step(i);
+        const c = changes.find(c => c.t === i);
+        if (c) trade(c);
+      }
+      readout(i); live.scrub.value = i;
+      if (i >= n - 1) return stop();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() {
+    playing = false; cancelAnimationFrame(raf);
+    if (live && live.play) live.play.textContent = i >= (live.n || 1) - 1 ? "↺ Replay" : "▶ Play";
+  }
+  function trade(c) {
+    const {b, fx, log, cells, changes} = live, buy = c.v > c.prev;
+    marks.setMarkers(changes.filter(x => x.t <= c.t).map(marker));
+    const item = h("li", {}, h("b", {}, buy ? "Buy" : "Sell"), `${day(b.t[c.t])}`, h("span", {}, `position ${pct(c.prev)} → ${pct(c.v)} at ${b.c[c.t].toLocaleString(undefined, {maximumFractionDigits: 2})}`));
+    log.prepend(item);
+    while (log.children.length > 5) log.lastChild.remove();
+    const cell = cells["Position"];
+    cell.classList.remove("flash-buy", "flash-sell"); void cell.offsetWidth; cell.classList.add(buy ? "flash-buy" : "flash-sell");
+    setTimeout(() => cell.classList.remove("flash-buy", "flash-sell"), 60);
+    if (calm.matches) return;  // no moving effects for people who asked for less motion
+    const x = chart.timeScale().timeToCoordinate(b.t[c.t]), y = candle.priceToCoordinate(b.c[c.t]);
+    if (x == null || y == null) return;
+    const color = `var(${buy ? "--s1" : "--s2"})`;
+    const ring = h("span", {class: "pulse", style: `left:${x}px;top:${y}px;--c:${color}`});
+    const tag = h("span", {class: "float", style: `left:${x}px;top:${y + (buy ? 22 : -22)}px;--c:${color}`}, buy ? `Buy ${pct(c.v)}` : `Sell to ${pct(c.v)}`);
+    fx.append(ring, tag);
+    for (const el of [ring, tag]) el.addEventListener("animationend", () => el.remove());
+  }
+  document.addEventListener("keydown", e => {  // space plays or pauses when the replay is on screen and nothing else has focus
+    if (e.code !== "Space" || !chart || ["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+    const r = live.stage.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) return;
+    e.preventDefault(); playing ? stop() : start();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { cssCache = {}; if (chart) { stop(); build(); } });
+  return {load};
+})();
+
+/* ======================= notes ======================= */
+function lessons(d) {
+  if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first one comes after 20 attempts."));
+  $("lessons").replaceChildren(...d.lessons.map(note => {
+    const box = h("div", {class: "notes", style: "margin-top:14px"}, h("h3", {}, `After attempt #${note.after_attempt}`));
+    for (const line of note.text.split("\n")) {
+      const cut = line.indexOf(":");
+      if (cut < 0) continue;
+      box.append(h("b", {}, {Worked: "What worked", Failed: "What failed", Next: "What to try next"}[line.slice(0, cut).trim()] || line.slice(0, cut).trim()),
+                 h("ul", {}, ...line.slice(cut + 1).split(" | ").map(item => h("li", {}, item.trim()))));
+    }
+    return box;
+  }));
+}
+
+/* ======================= load ======================= */
+let stateKey = null;
 async function refresh() {
   try {
-    let run = $("run").value, q = run ? "?run=" + encodeURIComponent(run) : "";
-    let d = await (await fetch("/api/state" + q)).json();
-    if (firstLoad && !run && d.runs.length) {  // open on the newest run: mixing runs hides what each one did
-      run = d.runs[0].run_id; q = "?run=" + encodeURIComponent(run);
-      d = await (await fetch("/api/state" + q)).json();
+    let run = $("run").value;
+    if (firstLoad || !run) {
+      const runs = (await (await fetch("/api/state?run=")).json()).runs;  // the newest run opens first
+      if (!run) run = (runs.find(r => r.run_id !== "baselines") || runs[0] || {}).run_id || "";
     }
-    $("run").replaceChildren(h("option", {value: ""}, "All runs"), ...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
+    const d = await (await fetch("/api/state?run=" + encodeURIComponent(run))).json();
+    $("run").replaceChildren(...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
     $("run").value = run;
-    const key = [run, d.funnel ? d.funnel.generated : 0, d.lessons.length, d.locks.holdout_opened, d.week5.shortlisted].join("|");
-    if (key !== stateKey) {  // nothing new was logged: leave the page as it is
-      stateKey = key; last = d;
-      summary(d); funnel(d); hist(d); ranges(d); activity(d); lessons(d); table(d);
-      stage.byId = new Map(d.attempts.map(a => [a.id, a]));
-      stage.lineage = buildLineage(d.attempts);
-      stage.points = d.attempts.filter(a => a.timing_sharpe != null && a.trades_per_symbol > 0).map(a => ({
-        id: a.id, score: a.timing_sharpe, trades: a.trades_per_symbol, pos: a.mean_position ?? 0, baseline: a.run_id === "baselines",
-        family: plain(a.family), idea: (a.hypothesis || "").slice(0, 140)}));
-      picked(); stage.dirty = true;
-    }
-    if (key !== curvesKey) { curvesKey = key; stage.curves = await (await fetch("/api/equity" + q)).json(); stage.dirty = true; }
-    firstLoad = false;
-    if (autoPick && d.attempts.length) {  // open each run on its best score
-      autoPick = false;
-      const best = d.attempts.filter(a => a.status === "ok").sort((x, y) => y.timing_sharpe - x.timing_sharpe)[0];
-      show((best || d.attempts[0]).id);
+    const key = [run, d.funnel ? d.funnel.generated : 0, d.lessons.length].join("|");
+    if (key !== stateKey) {  // nothing new was logged: leave the page, and any replay, alone
+      stateKey = key; D = d; ROWS = d.attempts; BYID = new Map(ROWS.map(r => [r.id, r]));
+      cache.set(run, d);
+      overview(d); pickList(d); lessons(d); refilter();
+      if (firstLoad) {
+        const statuses = [...new Set(ROWS.map(r => r.status))];
+        $("outcome").replaceChildren(h("option", {value: ""}, "All"), ...Object.keys(OUTCOME).filter(k => statuses.includes(k)).map(k => h("option", {value: k}, outcome(k))));
+        $("outcome").value = statuses.includes("ok") ? "ok" : ""; table();
+        const best = ROWS.filter(isScored).sort((x, y) => y.timing_sharpe - x.timing_sharpe)[0];
+        if (best) show(best.id);
+      }
+      firstLoad = false;
     }
     $("live").classList.remove("off");
     $("stamp").textContent = "Live · updated " + new Date().toLocaleTimeString();
@@ -811,12 +936,12 @@ async function refresh() {
     $("stamp").textContent = "Dashboard server not reachable";
   }
 }
-$("filter").append(...Object.entries(OUTCOME).map(([value, [label]]) => h("option", {value}, label)));
-$("filter").onchange = $("order").onchange = () => { if (last) table(last); };
-$("run").onchange = () => { firstLoad = false; autoPick = true; refresh(); };
-setMode("space"); fit(); requestAnimationFrame(frame);
+$("run").onchange = () => {
+  F.score = F.trades = F.market = null; F.fams.clear(); F.group = null; open.clear();
+  firstLoad = true; stateKey = null; refresh();
+};
 refresh();
-setInterval(refresh, 5000);
+setInterval(refresh, 10000);
 </script>
 </body>
 </html>
