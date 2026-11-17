@@ -46,13 +46,13 @@ In-sample, on discovery data only:
 
 ## The dashboard
 
-`python dashboard.py`, then http://127.0.0.1:8000. A read-only view of the log for judging a run, comparing runs and inspecting strategies:
+`python dashboard.py`, then http://127.0.0.1:8000. A read-only workbench over the log: filters on the left, strategies in the middle, the selected strategy on the right. Every score is drawn against zero and the luck benchmark on the same small ruler, so "is this better than luck?" is answered wherever a score appears.
 
-- the verdict against the luck benchmark and the survival funnel;
-- run-by-run comparison;
-- linked filters: drag across histograms of score, trades and holding time, or box-select a scatter;
-- near-copies collapsed into one row per rule;
-- a replay of any strategy's trades on the historical candles, with each buy and sell marked as it happens.
+- **Strategies:** linked filters (drag across histograms of score, trades and time in the market, or box-select a scatter), near-copies collapsed into one row per rule, and a replay of any strategy's trades on the historical candles with each buy and sell marked as it happens.
+- **Funnel:** how many attempts survived each check, where the rest stopped, and results by family.
+- **Compare runs:** up to three runs side by side.
+- **Live:** a running search as it happens: progress toward the official run's 1,000 attempts, each style's scores arriving in order against the luck line, and the researcher's latest proposals with the ones code turned away.
+- **Reviewer notes:** the reviewer agent's working notes.
 
 It shows discovery data only and never fetches live prices, because current prices are holdout data.
 

@@ -9,6 +9,7 @@ import functools
 import json
 import math
 import os
+import re
 import threading
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,7 +29,7 @@ import store
 
 ROOT = Path(__file__).parent
 LIST_COLS = ("id, created_at, run_id, pilot, tries, parent_id, family, left(hypothesis, 300) AS hypothesis, status, lookahead, "
-             "timing_sharpe, net_sharpe, trades_per_symbol, mean_position, "
+             "timing_sharpe, net_sharpe, trades_per_symbol, mean_position, split_part(prompt_version, '/', 2) AS island, "
              # average hours per holding: time in the market over the number of entries (two position changes
              # make a round trip). Approximate when positions are fractional; for sorting and filtering by style.
              f"CASE WHEN trades_per_symbol > 0 THEN mean_position * {pipeline.DISCOVERY_YEARS * 8760} "
@@ -39,6 +40,7 @@ BACKTESTED = "status IN ('ok', 'too_few_trades', 'duplicate')"
 POSITIONS = ROOT / "runs" / "positions"  # replay cache: one file per attempt
 REPLAYABLE = ("ok", "too_few_trades", "duplicate", "no_trades")  # statuses whose code ran and produced positions
 _sandbox_lock = threading.Lock()  # one replay in the sandbox at a time
+OFFICIAL_N = 1000  # PLAN.md: the official run stops at 1,000 attempts
 
 
 def clean(x):
@@ -175,17 +177,44 @@ def week5(run=None):
     return out
 
 
-@functools.cache
-def benchmark():
-    """Buy-and-hold on the discovery period, one point a day, to draw behind a strategy's equity."""
-    try:
-        frames = pipeline.load_discovery()
-    except SystemExit:
-        return {"dates": [], "equity": []}
-    closes = [f.close.to_numpy() for f in frames.values()]
-    ts = next(iter(frames.values())).ts
-    return {"dates": [t.strftime("%Y-%m-%d") for t in ts[::24]],
-            "equity": backtest.equity_curve(closes, [np.ones(len(c)) for c in closes], fee=0)[::24].tolist()}
+REFUSALS = (("numbers changed", "Only the numbers changed"), ("same exit", "A filter swapped on a crowded rule"),
+            ("builds on", "Built on a used-up line"), ("JSON", "Not valid JSON"))
+
+
+def live(run):
+    """What the search is doing now, for the Live tab: progress, pace and the researcher's latest proposals.
+
+    A proposal counts as accepted when an attempt in this run carries its idea. Why one was turned away is
+    in the next ask's prompt (agents.propose adds the reason). Skipped turns are counted from the run's log.
+    """
+    span = store.query("SELECT min(created_at) AS a, max(created_at) AS b, bool_or(pilot) AS pilot, max(id) AS last, "
+                       "count(*) FILTER (created_at > (now() AT TIME ZONE 'UTC') - INTERVAL 1 HOUR) AS last_hour "
+                       "FROM attempts WHERE run_id = ?", [run])
+    if not span or span[0]["a"] is None:
+        return None
+    span = span[0]
+    newest = span["last"] == store.query("SELECT max(id) AS m FROM attempts")[0]["m"]  # still running, or the latest run
+    upto = (span["b"] + timedelta(days=1)) if newest else span["b"] + timedelta(minutes=10)
+    calls = store.query("SELECT created_at, prompt, response FROM llm_calls WHERE role = 'researcher' AND created_at BETWEEN ? AND ? "
+                        "ORDER BY created_at DESC", [span["a"] - timedelta(minutes=10), upto])
+    ideas = {r["hypothesis"]: r["id"] for r in store.query("SELECT id, hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run])}
+    reasons, recent = {}, []
+    for k, c in enumerate(calls):
+        why = (c["prompt"] or "").partition("not accepted: ")[2]
+        if why:
+            label = next((name for key, name in REFUSALS if key in why), "Other")
+            reasons[label] = reasons.get(label, 0) + 1
+        if len(recent) < 8:
+            try:
+                h = json.loads(re.search(r"\{.*\}", c["response"] or "", re.DOTALL).group(0))
+            except (AttributeError, ValueError):
+                continue
+            recent.append({"t": c["created_at"], "family": h.get("family"), "hypothesis": h.get("hypothesis"),
+                           "accepted": ideas.get(h.get("hypothesis")), "latest": k == 0})
+    log = ROOT / "runs" / f"{run}.log"
+    skipped = sum(1 for line in log.open(encoding="utf-8", errors="replace") if line.startswith("- turn skipped")) if log.exists() else 0
+    return clean({"target": None if span["pilot"] else OFFICIAL_N, "last_hour": span["last_hour"], "asks": len(calls),
+                  "refused": sum(reasons.values()), "reasons": reasons, "recent": recent, "skipped": skipped})
 
 
 @functools.cache
@@ -249,7 +278,7 @@ def positions(attempt_id):
 
 def attempt(attempt_id):
     rows = store.query("SELECT * FROM attempts WHERE id = ?", [attempt_id])
-    return clean({"attempt": rows[0], "benchmark": benchmark()}) if rows else None
+    return clean({"attempt": rows[0]}) if rows else None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -259,6 +288,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply((ROOT / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
         if url.path == "/api/state":
             return self.reply_json(state(parse_qs(url.query).get("run", [None])[0]))
+        if url.path == "/api/live":
+            return self.reply_json(live(parse_qs(url.query).get("run", [""])[0]))
         if url.path == "/api/bars":
             return self.reply_json(bars())
         if url.path.startswith("/api/positions/") and url.path.rsplit("/", 1)[1].isdigit():

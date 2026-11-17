@@ -67,3 +67,20 @@ def test_replay_reruns_once_and_returns_change_points(tmp_path, monkeypatch):
     monkeypatch.setattr(dashboard.sandbox, "run", docker_down)
     store.add({"run_id": "r", "status": "ok", "code": code})                      # 4
     assert "Docker Desktop" in dashboard.positions(4)["error"]
+
+
+def test_live_reads_proposals_refusals_and_skipped_turns(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DB", tmp_path / "t.duckdb")
+    monkeypatch.setattr(dashboard, "ROOT", tmp_path)
+    assert dashboard.live("r") is None
+    ask = lambda prompt, idea: store.log_llm(role="researcher", model="m", prompt=prompt, tokens_in=1, tokens_out=1, seconds=1.0,
+                                             response='```json\n{"family": "trend", "hypothesis": "%s", "parent_id": null}\n```' % idea)
+    ask("summary", "A")
+    ask("summary\n\nYour last proposal was not accepted: it is an earlier idea with only the numbers changed. Change it.", "B")
+    store.add({"run_id": "r", "pilot": False, "tries": 0, "hypothesis": "B", "status": "ok"})  # 1: B was accepted
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "r.log").write_text("#1 ok\n- turn skipped: five proposals in a row were turned away (1 in a row)\n")
+    out = json.loads(json.dumps(dashboard.live("r"), allow_nan=False))
+    assert [(p["hypothesis"], p["accepted"]) for p in out["recent"]] == [("B", 1), ("A", None)]
+    assert out["recent"][0]["latest"] and out["reasons"] == {"Only the numbers changed": 1}
+    assert (out["asks"], out["refused"], out["skipped"], out["target"]) == (2, 1, 1, dashboard.OFFICIAL_N)
