@@ -20,7 +20,7 @@ def test_state_and_attempt_are_json_safe(tmp_path, monkeypatch):
     t = st["tele"]
     assert t["span"]["scored"] == 1 and t["span"]["counted"] == 0 and t["luck"] == 0  # one pilot score: no luck bar, nothing in N
     assert {s["status"]: s["n"] for s in t["statuses"]} == {"ok": 1, "static_reject": 1}
-    assert t["llm"][0]["role"] == "coder" and t["flow"][0]["n"] == 40 and t["pace"][0]["n"] == 2
+    assert t["llm"][0]["role"] == "coder" and t["llm"][0]["tokens"] == 40 and t["pace"][0]["n"] == 2
     assert st["week5"]["shortlisted"] is None  # stays locked until run_validation.py has run
     assert st["attempts"][1]["net_sharpe"] is None  # NaN must not reach the browser
     one = json.loads(json.dumps(dashboard.attempt(1), allow_nan=False))

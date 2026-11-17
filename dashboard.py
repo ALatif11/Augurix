@@ -94,8 +94,6 @@ def telemetry(where, params):
                             f"WHERE {where} GROUP BY 1 ORDER BY 1", params),
         "llm": store.query("SELECT role, count(*) AS calls, sum(seconds) AS seconds, sum(tokens_out) AS tokens FROM llm_calls "
                            "WHERE created_at BETWEEN ? AND ? GROUP BY role ORDER BY seconds DESC", window),
-        "flow": store.query("SELECT time_bucket(INTERVAL 1 MINUTE, created_at) AS t, sum(tokens_out) AS n FROM llm_calls "
-                            "WHERE created_at BETWEEN ? AND ? GROUP BY 1 ORDER BY 1", window),
     }
 
 

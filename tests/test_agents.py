@@ -57,20 +57,61 @@ def test_summary_shows_scores_by_turnover_and_forgets_earlier_rounds(monkeypatch
     assert "Attempts so far: 1." in text and "fourth idea" in text and "200h average" not in text and "OLD idea" not in text
 
 
-def test_propose_names_attempts_that_have_been_built_on_enough():
-    _ok(1.0, 100)                                      # id 1
-    _ok(0.5, 100, "Refine #1 with a volume filter")    # refine turn (turn 1)
-    _ok(0.5, 100, "Combine #1 and a range filter")
-    _ok(0.5, 100, "a third variation", parent_id=1)
-    _ok(0.5, 100, "something unrelated to the others")
-    seen = []
+def _researcher(*ideas):
+    """A fake model that proposes the given ideas in turn, and the prompts it was sent."""
+    replies, seen = iter(ideas), []
 
     def llm(role, system, user, schema=None, temperature=0.8):
         seen.append(user)
-        return '{"family": "trend", "hypothesis": "Long when the 24h mean is above the 168h mean.", "parent_id": null}'
+        idea, parent = next(replies)
+        return agents.Hypothesis(family="trend", hypothesis=idea, parent_id=parent).model_dump_json()
 
-    agents.propose("r", llm)  # turn 5: a refine turn
-    assert "Do not use them again: #1." in seen[0]
+    return llm, seen
+
+
+def test_a_line_of_ideas_is_used_up_however_the_refinements_are_chained():
+    _ok(1.0, 100)                                           # 1: the original
+    _ok(0.5, 100, "Refine #1 with a volume filter")         # 2 builds on 1
+    _ok(0.5, 100, "swap the exit for a slower one", parent_id=2)  # 3 builds on 2, not on 1
+    _ok(0.5, 100, "something unrelated to the others")      # 4: its own line
+    rows, _ = agents._round("r")
+    assert agents._spent(rows) == set()                     # two refinements: the line is still open
+    _ok(0.5, 100, "Combine #3 with a range filter")         # 5: the third refinement of the line that starts at 1
+    _ok(0.5, 100, "Refine #5 again")                        # 6: one too many
+    rows, _ = agents._round("r")
+    assert agents._spent(rows) == {1, 2, 3, 5, 6}           # the whole line, and not the unrelated idea
+    assert "#1 (used up)" in agents.summary("r") and "#4 (used up)" not in agents.summary("r")
+
+    llm, seen = _researcher(("Take #6 and add a volatility filter to it", None), ("a new idea, built on nothing", 5),
+                            ("Buy when the 480-hour high is broken, sell below the 480-hour mean", None))
+    h = agents.propose("r", llm)
+    assert h.hypothesis.startswith("Buy when") and len(seen) == 3
+    assert "not accepted: it builds on #6" in seen[1] and "not accepted: it builds on #5" in seen[2]  # by mention, then by parent_id
+
+
+def test_an_idea_that_only_changes_the_numbers_is_turned_away():
+    _ok(1.2, 58, "Enter when the close exceeds the 480-hour high and volume is 1.3 times its 24-hour mean.")
+    llm, seen = _researcher(("Enter when the close exceeds the 360-hour high and volume is 1.5 times its 48-hour mean.", None))
+    assert agents.propose("r", llm).hypothesis.startswith("Enter when the close exceeds the 360")  # one re-tuning is allowed
+    _ok(1.1, 79, "Enter when the close exceeds the 360-hour high and volume is 1.5 times its 48-hour mean.")
+    llm, seen = _researcher(("Enter when the close exceeds the 240-hour high and volume is 1.4 times its 24-hour mean.", None),
+                            ("Enter when the 24-hour mean of volume crosses above its 168-hour mean.", None))
+    assert agents.propose("r", llm).hypothesis.startswith("Enter when the 24-hour mean")
+    assert "only the numbers changed" in seen[1]
+
+    stubborn = ("Enter when the close exceeds the 120-hour high and volume is 2.0 times its 12-hour mean.", None)
+    llm, seen = _researcher(stubborn, stubborn, stubborn)
+    assert agents.propose("r", llm).hypothesis == stubborn[0] and len(seen) == 3  # after three asks the run moves on
+
+
+def test_explore_turns_show_what_the_family_already_scored():
+    _ok(-3.5, 2251, "Enter between hours 8 and 12 when the 1-hour return is positive")
+    others = [f for f in agents.FAMILIES if f != "trend"]
+    for i in range(15):  # every other family has been tried more, and 16 ideas make this an explore turn
+        store.add({"run_id": "r", "tries": 0, "family": others[i % 6], "hypothesis": f"filler idea {i}", "status": "crash", "error": "boom"})
+    llm, seen = _researcher(("Hold while the 168-hour mean of close is above the 720-hour mean", None))
+    agents.propose("r", llm)
+    assert "least-tried family: trend" in seen[0] and "timing Sharpe -3.50, 2251 trades" in seen[0].split("already tried:")[1]
 
 
 def test_review_passes_on_only_the_previous_next_steps():

@@ -19,11 +19,14 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v4-pilot"
+PROMPT_VERSION = "v5-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
-MAX_REFINES = 3  # ideas allowed to build on one attempt. night1 built on its top score 81 times.
+MAX_REFINES = 3  # refinements allowed in one line of ideas (an idea and everything built on it, directly or through
+                 # another refinement). night1 built on its top score 81 times; pilot4 got round a per-attempt cap by chaining.
+MAX_SAME_RULE = 2  # ideas allowed to share one wording once the numbers are removed: an idea and one re-tuning of it.
+                   # pilot4 proposed one breakout rule with volume multipliers of 1.3, 1.5 and 1.4.
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
 
@@ -106,8 +109,11 @@ Ideas are scored by timing Sharpe: the Sharpe ratio after 0.1% trading costs, mi
 holding a constant position of the same average size would have earned. Simply being long
 scores nothing; only being in the market at better times than average scores.
 
-Every position change costs 0.1%, so an idea that changes position more than a few hundred times
-over the history needs a large edge on each trade. Prefer rules that hold a position for many hours.
+Every position change costs 0.1%, and the history is about 35,000 hourly bars. Aim for fewer than
+300 position changes over it, which means holding for days, not hours. A condition on a single bar
+(a 1-hour return, one bar's volume against its average) flips constantly, so never use one as the
+exit, and use one for entry only together with a slower condition. Base the exit on a rolling
+window of 24 hours or more.
 
 You will be shown what has been tried so far. Propose ONE new idea, stated precisely enough to
 implement: the indicators, the window lengths in hours, and the entry and exit rules. Do not
@@ -116,7 +122,7 @@ mention specific dates, events or price levels.
 Keep it simple: at most two indicators, at most two entry conditions and one exit condition, in
 under 60 words. Describe each indicator by how it is computed ("the 24-hour rolling mean of
 volume"), never by an invented name. Adding one more filter to an idea that already has two is
-not a new idea.
+not a new idea, and neither is an earlier idea with different window lengths or thresholds.
 
 Reply with JSON only:
 {"family": one of """ + json.dumps(FAMILIES) + """, "hypothesis": "<the idea>", "parent_id": <id of the attempt you are refining, or null>}"""
@@ -140,10 +146,52 @@ def write_code(hypothesis, llm=chat, previous_code=None, error=None):
     return extract_code(llm("coder", CODER, user, temperature=0.4))
 
 
-def _line(r):
+def _rule(text):
+    """An idea with its numbers and punctuation removed, so re-tunings of one rule compare equal."""
+    return " ".join(re.findall(r"[a-z]+", (text or "").lower()))
+
+
+def _refs(r):
+    return {int(x) for x in re.findall(r"#(\d+)", r["hypothesis"] or "")} | {r["parent_id"]}
+
+
+def _spent(rows):
+    """Ids of attempts whose line of ideas has had MAX_REFINES refinements already.
+
+    A line is an idea plus everything built on it, directly or through another refinement, so
+    refining the latest refinement counts against the same line as refining the original.
+    """
+    root, known, idea = {}, {r["id"] for r in rows}, None
+
+    def find(i):
+        while root.setdefault(i, i) != i:
+            i = root[i]
+        return i
+
+    for r in rows:
+        if not r["tries"]:
+            idea = r["id"]
+        for other in ([idea] if r["tries"] else _refs(r)):  # a retry belongs to its idea
+            if other in known and other < r["id"]:
+                root[find(r["id"])] = find(other)
+    size = Counter(find(r["id"]) for r in rows if not r["tries"])
+    return {r["id"] for r in rows if size[find(r["id"])] > MAX_REFINES}
+
+
+def _objection(h, rules, spent):
+    """Why code turns a proposal away before any of it is written or run, or None if it stands."""
+    if rules[_rule(h.hypothesis)] >= MAX_SAME_RULE:
+        return "it is an earlier idea with only the numbers changed. Change the mechanism: a different indicator, condition or exit."
+    used = sorted(i for i in _refs({"hypothesis": h.hypothesis, "parent_id": h.parent_id}) if i in spent)
+    if used:
+        return (f"it builds on #{used[0]}, and that line of ideas has already been refined {MAX_REFINES} times. "
+                "Propose something that does not build on an earlier attempt.")
+
+
+def _line(r, spent=()):
     result = (f"timing Sharpe {r['timing_sharpe']:.2f}, {r['trades_per_symbol']:.0f} trades"
               if r["timing_sharpe"] is not None else f"{r['status']}: {(r['error'] or '')[:100]}")
-    return f"  #{r['id']} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
+    return f"  #{r['id']}{' (used up)' if r['id'] in spent else ''} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
 
 
 def _round(run_id):
@@ -170,60 +218,69 @@ def summary(run_id):
             counts[r[key] or "none"] = counts.get(r[key] or "none", 0) + 1
         return ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
 
+    spent = _spent(rows)
     scored = sorted((r for r in rows if r["status"] == "ok"), key=lambda r: -r["timing_sharpe"])
     parts = [f"Attempts so far: {len(rows)}.", f"By family: {tally('family')}.", f"By outcome: {tally('status')}."]
     if scored:
-        parts += ["Best:"] + [_line(r) for r in scored[:5]]
+        parts += ["Best:"] + [_line(r, spent) for r in scored[:5]]
         if scored[5:]:
-            parts += ["Worst:"] + [_line(r) for r in scored[5:][-5:]]
+            parts += ["Worst:"] + [_line(r, spent) for r in scored[5:][-5:]]
 
         def median(lo, hi):
             xs = [r["timing_sharpe"] for r in scored if lo <= r["trades_per_symbol"] < hi]
             return f"{statistics.median(xs):+.2f} over {len(xs)}" if xs else "none yet"
         parts.append(f"Median score by number of trades: under 300: {median(0, 300)}; 300 to 1000: {median(300, 1000)}; "
                      f"over 1000: {median(1000, float('inf'))}.")
-    parts += ["Most recent:"] + [_line(r) for r in rows[-5:]]
+    parts += ["Most recent:"] + [_line(r, spent) for r in rows[-5:]]
+    if spent:
+        parts.append(f'Attempts marked "used up" belong to a line of ideas already refined {MAX_REFINES} times. Do not build on them.')
     if lessons:
         parts += ["Lessons from earlier reviews of this search (oldest first):"] + [l["text"] for l in lessons]
     return "\n".join(parts)
 
 
 def propose(run_id, llm=chat):
-    """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer."""
+    """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer.
+
+    Code turns away a proposal that only re-tunes an earlier rule or extends a used-up line, and asks again.
+    """
     turn = store.count("run_id = ? AND tries = 0", [run_id])
     tried = {r["family"]: r["n"] for r in store.query(
         "SELECT family, count(*) AS n FROM attempts WHERE run_id = ? GROUP BY family", [run_id])}
+    rows, lessons = _round(run_id)
     # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
     # variations of its single best trend strategy, which is hill-climbing on noise.
     if turn % 2 == 0:
         family = sorted(FAMILIES, key=lambda f: tried.get(f, 0))[(turn // 2) % 2]  # least-tried, then second least-tried
-        seen = store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND family = ? AND tries = 0 "
-                           "ORDER BY id DESC LIMIT 12", [run_id, family])
+        seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
+                           "WHERE run_id = ? AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", [run_id, family])
         ask = f"Propose an idea in the least-tried family: {family}."
-        if seen:
+        if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
             ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
-                    + "\n".join(f"  - {s['hypothesis'][:140]}" for s in seen))
+                    + "\n".join(_line(r) for r in seen))
+    elif turn % 4 == 1 or not lessons:
+        ask = ("Take one of the better attempts, or a failed idea, and change its mechanism: a different indicator, "
+               "condition or exit. Changing only window lengths or thresholds is not accepted.")
     else:
-        rows, lessons = _round(run_id)
-        if turn % 4 == 1 or not lessons:
-            ask = "Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it."
-        else:
-            ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
-        built_on = Counter(i for r in rows if r["tries"] == 0
-                           for i in {int(x) for x in re.findall(r"#(\d+)", r["hypothesis"] or "")} | {r["parent_id"]})
-        spent = sorted(i for i, n in built_on.items() if i and n >= MAX_REFINES)
-        if spent:
-            ask += (f" These attempts have each been built on {MAX_REFINES} or more times already. Do not use them again: "
-                    + ", ".join(f"#{i}" for i in spent) + ".")
-    user = summary(run_id) + "\n\n" + ask
-    for last in (False, True):
-        text = llm("researcher", RESEARCHER, user, schema=Hypothesis.model_json_schema())
+        ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
+    rules = Counter(_rule(r["hypothesis"]) for r in store.query(
+        "SELECT hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run_id]))
+    spent, user, h, reason = _spent(rows), summary(run_id) + "\n\n" + ask, None, None
+    for _ in range(3):
+        text = llm("researcher", RESEARCHER, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
+                   schema=Hypothesis.model_json_schema())
         try:
             match = re.search(r"\{.*\}", text, re.DOTALL)  # tolerate a fence or stray words around the JSON
-            return Hypothesis.model_validate_json(match.group(0) if match else text)
-        except ValidationError:
-            if last:
-                raise
+            h = Hypothesis.model_validate_json(match.group(0) if match else text)
+        except ValidationError as e:
+            error, reason = e, "it was not valid JSON in the required form."
+            continue
+        reason = _objection(h, rules, spent)
+        if not reason:
+            return h
+    if h is None:
+        raise error
+    return h  # ponytail: after three asks the last valid proposal is taken as it is; it still counts as a trial
 
 
 class Review(BaseModel):
@@ -246,7 +303,8 @@ Write three short lists, at most 5 items each, one sentence per item, referring 
   error text. Note when heavy trading (many trades) is what sank an idea.
 - next_steps: specific directions not yet tried, or a concrete fix for a promising failure. Never
   repeat a next step you gave before, and never suggest adding another filter to an idea that
-  later attempts already refined without improving it. Simpler ideas are preferred.
+  later attempts already refined without improving it. A next step must change the mechanism, not
+  only a window length or threshold. Simpler ideas that trade less often are preferred.
 
 Do not mention dates, events or price levels.
 Reply with JSON only: {"worked": [...], "failed": [...], "next_steps": [...]}"""

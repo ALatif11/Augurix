@@ -5,233 +5,228 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FinProj · Strategy discovery</title>
 <style>
+/* Colours: chart surface, inks and the two series are the validated pair for each mode (blue and orange,
+   checked for colour-blind separation and contrast on these surfaces). Clay is for interface accents only, never data. */
 :root {
-  color-scheme: dark;
-  --page: #04070b; --surface: #0b1118; --ink: #e8eef5; --ink2: #a9b6c6; --muted: #6f7f92;
-  --grid: #18222e; --axis: #2a3848; --border: rgba(120,190,255,.16); --wash: rgba(120,190,255,.06);
-  --s1: #3987e5; --s2: #d95926; --glow: #6cb4ff;
+  color-scheme: light dark;
+  --page: #f4f3ee; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.04); --inset: #f4f3ee;
+  --s1: #2a78d6; --s2: #eb6834; --accent: #c96442;
   --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
-  --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #121211; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.05); --inset: #121211;
+    --s1: #3987e5; --s2: #d95926; --accent: #d97757;
+  }
 }
 * { box-sizing: border-box; }
-body {
-  margin: 0; color: var(--ink); font: 12.5px/1.5 var(--mono); background: var(--page);
-  background-image:
-    radial-gradient(1200px 560px at 34% -140px, rgba(57,135,229,.17), transparent 70%),
-    linear-gradient(rgba(120,190,255,.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120,190,255,.03) 1px, transparent 1px);
-  background-size: auto, 32px 32px, 32px 32px; background-attachment: fixed;
-}
-main { max-width: 1560px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-h1 { font: 600 14px var(--mono); letter-spacing: .16em; text-transform: uppercase; margin: 0; }
-h1 b { color: var(--glow); font-weight: 600; }
-h2, h3 { font: 600 10.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink2); margin: 0; }
-.sub { color: var(--muted); font-size: 12px; margin: 4px 0 8px; max-width: 96ch; }
-label { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-select, button { font: 11.5px var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 5px 9px; }
-button { cursor: pointer; letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
-button:hover { border-color: var(--glow); color: var(--ink); }
-button[aria-pressed="true"] { color: var(--ink); border-color: var(--glow); background: rgba(57,135,229,.16); box-shadow: 0 0 14px rgba(57,135,229,.25) inset; }
-:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
-.stats { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.stats b { color: var(--ink); font-weight: 600; }
-.live { color: var(--ink2); font-size: 11px; display: flex; align-items: center; gap: 8px; }
-.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); }
-.live.off i { background: var(--crit); box-shadow: 0 0 10px var(--crit); }
-@keyframes pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: no-preference) { .live:not(.off) i, .pipe .fresh { animation: pulse 2s infinite; } }
-.caveat { margin: 0; padding: 6px 12px; border-left: 3px solid var(--warn); background: var(--surface); color: var(--ink2); font-size: 12px; }
-.caveat b { color: var(--ink); }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 56px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+h1 { font: 500 20px var(--serif); margin: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 10px; }
+h1 i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+h1 span { color: var(--ink2); }
+.meta { color: var(--ink2); font-size: 13px; margin: 6px 0 0; }
+section { margin-top: 36px; }
+h2 { font: 500 22px/1.25 var(--serif); margin: 0 0 4px; }
+h3 { font: 600 14px var(--sans); margin: 0 0 2px; }
+.sub { color: var(--ink2); font-size: 13.5px; margin: 0 0 14px; max-width: 78ch; }
+label { color: var(--ink2); font-size: 13px; }
+select, button { font: 13px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+button { cursor: pointer; }
+button:hover, select:hover { border-color: var(--axis); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--wash); border-radius: 10px; }
+.tabs button { border: 0; background: none; color: var(--ink2); border-radius: 7px; }
+.tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border); }
+#spin[aria-pressed="true"] { border-color: var(--ink2); }
+.live { color: var(--ink2); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+.live.off i { background: var(--crit); }
 
-/* Pipeline strip: one chip per stage an attempt passes through, in order */
-.pipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
-.pipe > div { flex: 1 1 120px; border: 1px solid var(--border); border-radius: 3px; padding: 5px 9px 6px; background: rgba(11,17,24,.85); position: relative; }
-.pipe > div + div::before { content: "›"; position: absolute; left: -6px; top: 50%; transform: translate(-50%, -52%); color: var(--muted); }
-.pipe .name { font-size: 10.5px; letter-spacing: .06em; color: var(--ink2); white-space: nowrap; }
-.pipe .val { font-size: 11px; color: var(--muted); }
-.pipe .val b { font: 600 15px var(--mono); color: var(--ink); margin-right: 5px; }
-.pipe .hot { border-color: var(--glow); background: rgba(57,135,229,.16); box-shadow: 0 0 16px rgba(57,135,229,.28) inset; }
-.pipe .hot .name { color: var(--ink); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.work { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .work { grid-template-columns: 1fr; } }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.row h2, .row h3 { flex: 1 1 auto; margin: 0; }
+.row .aside { color: var(--ink2); font-size: 13px; }
+.row .aside b { color: var(--ink); font-weight: 600; }
 
-.card { position: relative; background: linear-gradient(180deg, rgba(13,20,29,.94), rgba(8,13,19,.94)); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; min-width: 0; }
-.card::before, .card::after { content: ""; position: absolute; width: 10px; height: 10px; border: solid var(--glow); opacity: .75; pointer-events: none; }
-.card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
-.card::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
-.head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-.head h3, .head h2 { flex: 1 1 auto; }
-.head span { font-size: 11px; color: var(--ink2); white-space: nowrap; }
-.head span b { color: var(--ink); font-weight: 600; }
+.verdict { font: 500 26px/1.3 var(--serif); margin: 0 0 6px; max-width: 30ch; text-wrap: balance; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin: 18px -20px -18px; border-top: 1px solid var(--border); }
+.tiles > div { padding: 14px 20px; border-right: 1px solid var(--border); }
+.tiles > div:last-child { border-right: 0; }
+.tiles .k { color: var(--ink2); font-size: 13px; }
+.tiles .v { font: 500 28px/1.2 var(--sans); margin: 2px 0; }
+.tiles .n { color: var(--muted); font-size: 12.5px; }
+.note { margin: 14px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--wash); color: var(--ink2); font-size: 13.5px; }
+.note b { color: var(--ink); }
 
-.deck { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(310px, 1fr); gap: 10px; }
-.tele { display: grid; gap: 10px; align-content: start; }
-.three { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 10px; }
-.work { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; align-items: start; }
-@media (max-width: 1100px) { .deck, .work { grid-template-columns: 1fr; } .tele { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); } }
+/* A meter is a list of labelled bars: label, bar, number */
+.meter { display: grid; grid-template-columns: minmax(96px, max-content) minmax(40px, 1fr) minmax(0, max-content); gap: 9px 14px; align-items: center; font-size: 13.5px; }
+.meter .track { height: 10px; }
+.meter .bar { height: 10px; background: var(--s1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.meter .locked { height: 10px; border: 1px dashed var(--axis); border-radius: 0 4px 4px 0; }
+.meter .num { text-align: right; white-space: nowrap; }
+.meter .num small, .meter .why { color: var(--muted); font-size: 12.5px; }
+.meter .lbl.off { color: var(--muted); }
 
-.stagecard { display: flex; flex-direction: column; }
-.stagehead { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
-.stagehead h2 { flex: 1 1 auto; }
-.stage { position: relative; flex: 1 1 560px; min-height: 440px; margin: 2px -12px 0; touch-action: none; cursor: grab; overflow: hidden; }
+.stage { position: relative; height: 520px; margin: 4px -20px 0; touch-action: none; cursor: grab; }
 .stage.dragging { cursor: grabbing; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-@media (max-width: 700px) { .stage { min-height: 340px; flex-basis: 340px; } }
-.hud { position: absolute; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
-.hud.tr { top: 8px; right: 12px; text-align: right; }
-.callout { left: 12px; bottom: 10px; max-width: min(460px, 80%); padding: 6px 10px; border: 1px solid var(--warn); background: rgba(8,13,20,.9); color: var(--ink2); letter-spacing: .06em; text-transform: none; }
-.callout b { color: var(--ink); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink2); font-size: 11.5px; margin: 6px 0 2px; }
+@media (max-width: 700px) { .stage { height: 360px; } }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink2); font-size: 13px; margin: 8px 0 0; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
 .legend i.line { width: 14px; height: 2px; border-radius: 0; vertical-align: middle; }
-.legend i.dim { opacity: .45; }
+.legend i.dim { opacity: .4; }
 .legend i.diamond { border-radius: 0; transform: rotate(45deg) scale(.8); }
 .legend i.ring { background: none !important; border: 2px solid var(--warn); }
 .legend i.hollow { background: var(--surface) !important; border: 2px solid var(--s1); }
-
-/* A meter is a list of labelled bars: label, bar, number */
-.meter { display: grid; grid-template-columns: minmax(70px, max-content) minmax(30px, 1fr) minmax(0, max-content); gap: 5px 10px; align-items: center; font-size: 11.5px; }
-.meter .track { height: 9px; position: relative; }
-.meter .bar { height: 9px; background: linear-gradient(90deg, #2b6dbf, var(--s1)); border-radius: 0 3px 3px 0; min-width: 2px; box-shadow: 0 0 10px rgba(57,135,229,.4); }
-.meter .locked { height: 9px; border: 1px dashed var(--axis); border-radius: 0 3px 3px 0; }
-.meter .num { text-align: right; white-space: nowrap; }
-.meter .num small, .meter .why { color: var(--muted); font-size: 11px; }
-.meter .lbl { color: var(--ink2); white-space: nowrap; }
-.meter .lbl.off { color: var(--muted); }
-
-.read { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 10px; margin: 0; }
-.read dt { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.read dd { margin: 0; font: 600 17px var(--mono); text-shadow: 0 0 18px rgba(108,180,255,.4); }
-.mosaic { display: grid; grid-template-columns: repeat(auto-fill, minmax(11px, 1fr)); gap: 2px; }
-.mosaic i { aspect-ratio: 1; border-radius: 2px; cursor: pointer; opacity: .9; }
-.mosaic i:hover { outline: 1px solid var(--ink); }
-.good { background: var(--good); } .warn { background: var(--warn); } .serious { background: var(--serious); } .crit { background: var(--crit); }
+#picked { margin: 10px 0 0; color: var(--ink2); font-size: 13.5px; }
+#picked b { color: var(--ink); font-weight: 600; }
 
 svg { display: block; width: 100%; height: auto; overflow: visible; }
-svg text { fill: var(--muted); font: 10.5px var(--mono); }
+svg text { fill: var(--muted); font: 11.5px var(--sans); }
 svg .lab { fill: var(--ink2); }
 .chart { position: relative; }
-.tip { position: absolute; z-index: 3; pointer-events: none; background: rgba(8,13,20,.96); border: 1px solid var(--border); border-radius: 3px; padding: 6px 9px; font: 11.5px/1.5 var(--mono); white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,.5); display: none; max-width: 360px; }
-.tip b { font-weight: 600; color: var(--ink); }
-.tip span { color: var(--muted); }
-.tip .idea { white-space: normal; color: var(--ink2); display: block; margin-top: 2px; }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.14); display: none; max-width: 340px; }
+.tip b { font-weight: 600; }
+.tip span { color: var(--ink2); }
+.tip .idea { white-space: normal; display: block; margin-top: 2px; }
 
-.scroll { max-height: 620px; overflow: auto; margin: 0 -12px -10px; }
-table { width: 100%; border-collapse: collapse; }
-th { position: sticky; top: 0; background: #0b1118; text-align: left; font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
-td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
-th:first-child, td:first-child { padding-left: 12px; }
+.scroll { max-height: 640px; overflow: auto; margin: 0 -20px -18px; border-top: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; font-size: 12.5px; color: var(--ink2); padding: 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
+th:first-child, td:first-child { padding-left: 20px; }
 th.r, td.r { text-align: right; }
 tbody tr { cursor: pointer; }
 tbody tr:hover { background: var(--wash); }
-tbody tr[aria-selected="true"] { background: rgba(57,135,229,.12); box-shadow: inset 3px 0 0 var(--glow); }
+tbody tr[aria-selected="true"] { background: var(--wash); box-shadow: inset 3px 0 0 var(--accent); }
 td.idea { color: var(--ink2); max-width: 0; width: 55%; overflow: hidden; text-overflow: ellipsis; }
 .chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .chip svg { width: 10px; height: 10px; flex: none; }
-.tag { color: var(--muted); font-size: 11px; }
+.tag { color: var(--muted); font-size: 12px; }
 
-dl.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 12px; margin: 10px 0; }
-dl.facts dt { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-dl.facts dd { margin: 0; font: 600 15px var(--mono); }
-pre { margin: 8px 0 0; padding: 9px 11px; background: #070b11; border: 1px solid var(--border); border-radius: 3px; overflow: auto; max-height: 340px; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--ink2); }
+dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px 14px; margin: 14px 0; }
+dt { color: var(--ink2); font-size: 12.5px; }
+dd { margin: 0; font: 500 17px var(--sans); }
+pre { margin: 10px 0 0; padding: 12px 14px; background: var(--inset); border-radius: 8px; overflow: auto; max-height: 340px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
 pre.err { border-left: 3px solid var(--crit); }
-.idea-text { margin: 6px 0 10px; color: var(--ink); }
-.empty { color: var(--muted); padding: 18px 0; text-align: center; }
-.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 12px 22px; }
-.notes h4 { font: 500 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--glow); margin: 0 0 4px; }
-.notes b { display: block; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
-.notes ul { margin: 3px 0 0; padding-left: 18px; color: var(--ink2); }
-.locked-card { display: flex; gap: 12px; align-items: flex-start; }
-.locked-card svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--muted); }
-.locked-card p { margin: 2px 0 0; color: var(--ink2); max-width: 96ch; }
+.idea-text { margin: 8px 0 10px; }
+.empty { color: var(--muted); padding: 22px 0; text-align: center; }
+.notes h3 { margin-bottom: 8px; }
+.notes b { display: block; font-weight: 600; font-size: 13px; margin-top: 10px; }
+.notes ul { margin: 4px 0 0; padding-left: 20px; color: var(--ink2); }
+.notes li { margin: 3px 0; max-width: 100ch; }
+details { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+summary { cursor: pointer; color: var(--ink2); font-size: 13.5px; }
+details .notes { margin-top: 12px; }
+.locked-card { display: flex; gap: 14px; align-items: flex-start; }
+.locked-card svg { width: 20px; height: 20px; flex: none; margin-top: 3px; color: var(--muted); }
+.locked-card p { margin: 2px 0 0; color: var(--ink2); max-width: 78ch; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>FinProj <b>//</b> Strategy discovery</h1>
+    <h1><i></i>FinProj <span>Strategy discovery</span></h1>
     <label>Run <select id="run"><option value="">All runs</option></select></label>
-    <div class="stats" id="stats"></div>
-    <div class="live off" id="live"><i></i><span id="stamp">connecting…</span></div>
+    <div class="live off" id="live"><i></i><span id="stamp">Connecting…</span></div>
   </header>
+  <p class="meta" id="meta"></p>
 
-  <nav class="pipe" id="pipe" aria-label="Pipeline stages, in the order an attempt passes through them"></nav>
+  <section class="card" style="margin-top:18px">
+    <p class="verdict" id="verdict">Loading the log…</p>
+    <p class="sub" id="verdict-why" style="margin:0"></p>
+    <p class="note"><b>These are in-sample numbers.</b> Everything on this page is measured on 2019–2022, a period the model has seen. None of it is evidence that a strategy works. Only the holdout counts, and it is still locked.</p>
+    <div class="tiles" id="tiles"></div>
+  </section>
 
-  <p class="caveat"><b>In-sample numbers.</b> Everything here is measured on the discovery period (2019–2022), which the model has seen. None of it is evidence that a strategy works. Only the holdout counts, and it is still locked.</p>
+  <section>
+    <h2>The funnel</h2>
+    <p class="sub">How many attempts are left after each check, and where the rest stopped. This table is what the project delivers.</p>
+    <div class="cols">
+      <div class="card"><h3>Left after each check</h3><p class="sub">Share of all attempts in this run.</p><div class="meter" id="funnel"></div></div>
+      <div class="card"><h3>Where rejected attempts stopped</h3><p class="sub">Count, then the running share of all rejections.</p><div class="meter" id="stops"></div></div>
+    </div>
+  </section>
 
-  <section class="deck">
-    <div class="card stagecard">
-      <div class="stagehead">
-        <h2 id="stage-title">Idea lineage</h2>
-        <button id="mode-lineage" aria-pressed="true">Lineage</button>
-        <button id="mode-space" aria-pressed="false">Strategy space</button>
-        <button id="mode-terrain" aria-pressed="false">Equity terrain</button>
-        <button id="spin" aria-pressed="true" title="Rotate the view automatically">Rotate</button>
+  <section>
+    <h2>Scores</h2>
+    <p class="sub">Timing Sharpe is the return per unit of risk after fees, minus what holding the same average position would have earned. Zero means no skill. The dashed line is the score the best of this many no-skill ideas is expected to reach.</p>
+    <div class="cols">
+      <div class="card"><h3>Every backtested attempt</h3><p class="sub">Luck alone spreads four-year scores about ±0.5 around zero. The long left tail is trading fees.</p><div id="hist"></div></div>
+      <div class="card"><h3>By strategy family</h3>
+        <div class="legend" style="margin:4px 0 10px"><span><i style="background:var(--s1)"></i>Median</span><span><i class="hollow"></i>Best</span></div>
+        <div id="ranges"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2>Explore the ideas</h2>
+      <div class="tabs" role="group" aria-label="View">
+        <button id="mode-space" aria-pressed="true">Strategy space</button>
+        <button id="mode-lineage" aria-pressed="false">Idea lineage</button>
+        <button id="mode-terrain" aria-pressed="false">Equity curves</button>
       </div>
-      <p class="sub" id="stage-sub"></p>
+      <button id="spin" aria-pressed="false" title="Turn the view slowly">Rotate</button>
+    </div>
+    <p class="sub" id="stage-sub"></p>
+    <div class="card">
       <div class="stage" id="stage">
         <canvas id="scene" role="img" aria-label="Three-dimensional view of the attempts. The same data is in the attempts table below."></canvas>
-        <div class="hud tr" id="hud-cam"></div>
-        <div class="hud callout" id="callout" hidden></div>
         <div class="tip" id="tip3d"></div>
       </div>
       <div class="legend" id="stage-legend"></div>
-    </div>
-
-    <aside class="tele">
-      <div class="card"><div class="head"><h3>Attempts per 5 minutes</h3><span id="pace-n"></span></div><div id="pace"></div></div>
-      <div class="card"><div class="head"><h3>Ideas by family</h3><span>attempts · median score</span></div><div class="meter" id="families"></div></div>
-      <div class="card"><div class="head"><h3>Model time by agent</h3><span id="llm-n"></span></div><div class="meter" id="llm"></div></div>
-      <div class="card"><div class="head"><h3>Survival funnel</h3><span>left after each check</span></div><div class="meter" id="funnel"></div></div>
-      <div class="card"><div class="head"><h3>Readout</h3><span>timing Sharpe, in-sample</span></div><dl class="read" id="read"></dl></div>
-      <div class="card"><div class="head"><h3>Latest outcomes</h3><span>oldest → newest</span></div><div class="mosaic" id="mosaic"></div>
-        <div class="legend"><span><i class="good"></i>backtested</span><span><i class="warn"></i>too few trades</span><span><i class="serious"></i>rejected</span><span><i class="crit"></i>failed to run</span></div></div>
-    </aside>
-  </section>
-
-  <section class="card">
-    <div class="head"><h3>Model tokens written per minute</h3><span id="flow-n"></span></div>
-    <div id="flow"></div>
-  </section>
-
-  <section class="three">
-    <div class="card">
-      <div class="head"><h3>Score range by family</h3></div>
-      <div class="legend"><span><i style="background:var(--s1)"></i>median</span><span><i class="hollow"></i>best</span><span><i class="line" style="background:var(--ink2)"></i>best expected from luck alone</span></div>
-      <div id="ranges"></div>
-    </div>
-    <div class="card">
-      <div class="head"><h3>Where rejected attempts stopped</h3><span>count · running share</span></div>
-      <div class="meter" id="stops"></div>
-    </div>
-    <div class="card">
-      <div class="head"><h3>Timing Sharpe of every backtested attempt</h3></div>
-      <div id="hist"></div>
+      <p id="picked"></p>
     </div>
   </section>
 
-  <section class="card">
-    <div class="head"><h2>What the reviewer agent has recorded</h2></div>
-    <p class="sub">Every 20 attempts the model reads the latest results and writes notes the researcher agent then works from. Built from discovery results only: working notes, not findings.</p>
-    <div class="notes" id="lessons"></div>
+  <section>
+    <h2>How the run went</h2>
+    <p class="sub">Speed of the search and where the model's time was spent.</p>
+    <div class="cols">
+      <div class="card"><div class="row"><h3>Attempts per 5 minutes</h3><span class="aside" id="pace-n"></span></div><div id="pace"></div></div>
+      <div class="card"><div class="row"><h3>Model time by agent</h3><span class="aside" id="llm-n"></span></div><div class="meter" id="llm"></div></div>
+    </div>
   </section>
 
-  <section class="work">
-    <div class="card">
-      <div class="head"><h2>Attempts</h2><span>newest first, up to 1,000 · select a row to inspect it</span></div>
-      <div class="scroll">
+  <section>
+    <h2>Reviewer notes</h2>
+    <p class="sub">Every 20 attempts the model reads the latest results and writes notes for the researcher agent. They are working notes built from the scores above, not findings.</p>
+    <div class="card" id="lessons"></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2>Attempts</h2>
+      <label>Outcome <select id="filter"><option value="">All</option></select></label>
+      <label>Sort <select id="order"><option value="new">Newest first</option><option value="best">Best score first</option></select></label>
+    </div>
+    <p class="sub" id="count"></p>
+    <div class="work">
+      <div class="card" style="padding-top:0"><div class="scroll" style="margin-top:0;border-top:0;border-radius:12px">
         <table>
           <thead><tr><th>#</th><th>Time</th><th>Family</th><th>Idea</th><th>Outcome</th><th class="r">Timing</th><th class="r">Net</th><th class="r">Trades</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
-      </div>
+      </div></div>
+      <div class="card" id="detail"><div class="empty">Select an attempt to see its idea, code and equity curve.</div></div>
     </div>
-    <div class="card" id="detail"><div class="empty">Select an attempt to see its idea, code and equity curve.</div></div>
   </section>
 
   <section class="card locked-card">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
     <div>
-      <h2>Forward test: locked</h2>
+      <h3>Forward test: locked</h3>
       <p>Scoring frozen strategies on new market data starts only after the holdout has been opened (PLAN.md, Week 5). Current prices are holdout data, so this page does not fetch them. Looking early would spend the one clean test the project has.</p>
     </div>
   </section>
@@ -260,7 +255,7 @@ const pct = x => x == null ? "–" : minus(Math.round(x * 100) + "%");
 const big = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(Math.round(n));
 const clock = t => new Date(t + "Z").toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 const plain = f => (f || "no family").replace(/_/g, " ");
-const cssCache = {};
+let cssCache = {};
 const css = name => cssCache[name] ??= getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const OUTCOME = {
@@ -274,6 +269,7 @@ const OUTCOME = {
   crash:          ["Crashed",      "crit"],
   timeout:        ["Timed out",    "crit"],
 };
+const outcome = status => (OUTCOME[status] || [status, "warn"])[0];
 // Shape repeats what colour says, so the outcome never depends on colour alone.
 const SHAPE = {
   good: () => s("circle", {cx: 5, cy: 5, r: 4.5}),
@@ -286,33 +282,29 @@ function chip(status) {
   return h("span", {class: "chip"}, s("svg", {viewBox: "0 0 10 10", fill: `var(--${level})`, "aria-hidden": "true"}, SHAPE[level]()), label);
 }
 
-let selected = null, firstLoad = true, autoPick = true;
+let selected = null, firstLoad = true, autoPick = true, last = null;
 const BUILT_ON = 3;  // an attempt this many ideas have built on is ringed (agents.MAX_REFINES)
 
 /* ---------- 3D stage: a small perspective renderer on a 2D canvas, no library ---------- */
 const cv = $("scene"), ctx = cv.getContext("2d"), tip3d = $("tip3d");
-const stage = {mode: "lineage", yaw: -0.62, pitch: 0.62, w: 0, h: 0, points: [], curves: null, lineage: null, byId: new Map(), picks: [], hover: null, drag: null, dirty: true,
-               spin: !matchMedia("(prefers-reduced-motion: reduce)").matches};
+const stage = {mode: "space", yaw: -0.62, pitch: 0.4, w: 0, h: 0, points: [], curves: null, lineage: null, byId: new Map(), picks: [], hover: null, drag: null, dirty: true, spin: false};
 const TEXT = {
-  lineage: ["Idea lineage",
-            "Each dot is one idea. Its sector is the strategy family, its distance from the centre is when it was tried (latest at the rim), and its height is its timing Sharpe above or below the zero-skill disc. A strand joins an idea to the earlier attempt it was built on. A fan of strands into one dot is the search circling a single lucky result."],
-  space: ["Strategy space",
-          "Each dot is one backtested attempt. Height is its timing Sharpe; the other two axes are how often it trades and how much of the time it is in the market. The flat sheet is zero skill, and the dashed sheets mark ±0.5, the spread luck alone produces over four years. Dots between them are dimmed because they cannot be told apart from luck."],
-  terrain: ["Equity terrain",
-            "Each ridge is one attempt's growth of 1 unit through 2019–2022, ordered from the lowest timing Sharpe at the front to the highest at the back. The ridges share one shape because that shape is the market itself. What a strategy adds is only the small difference between its ridge and its neighbours."],
+  space: "Each dot is one backtested attempt. Height is its timing Sharpe; the other two axes are how often it trades and how much of the time it is in the market. The flat sheet is zero skill and the dashed sheets mark ±0.5, the spread luck alone produces over four years. Dots between them are faded because they cannot be told apart from luck. Scores below −3 are drawn at −3.",
+  lineage: "Each dot is one idea. Its sector is the strategy family, its distance from the centre is when it was tried (latest at the rim), and its height is its timing Sharpe above or below the zero-skill disc. A line joins an idea to the earlier attempt it was built on. Many lines into one dot means the search kept circling a single lucky result.",
+  terrain: "Each line is one attempt's growth of 1 unit through 2019–2022, ordered from the lowest timing Sharpe at the front to the highest at the back. They share one shape because that shape is the market itself. What a strategy adds is only the small difference between its line and its neighbours.",
 };
 const PITCH = {lineage: 0.62, space: 0.4, terrain: 0.58};
 function setMode(mode) {
   stage.mode = mode; stage.dirty = true; stage.hover = null; tip3d.style.display = "none";
   stage.pitch = PITCH[mode];
   for (const m of Object.keys(TEXT)) $("mode-" + m).setAttribute("aria-pressed", m === mode);
-  $("stage-title").textContent = TEXT[mode][0]; $("stage-sub").textContent = TEXT[mode][1] + " Drag to rotate; select a dot to inspect it.";
+  $("stage-sub").textContent = TEXT[mode] + " Drag to turn the view; select a dot to inspect it.";
   const dot = (cls, color, text) => h("span", {}, h("i", {class: cls, style: `background:${color}`}), text);
   $("stage-legend").replaceChildren(...({
     lineage: [dot("", "var(--s1)", "Idea, outside the luck band"), dot("dim", "var(--s1)", "Inside the luck band"), dot("dim", "var(--muted)", "Rejected before a score"),
               dot("ring", "", `Built on ${BUILT_ON} or more times`), dot("line", "var(--s1)", "Built on")],
     space: [dot("", "var(--s1)", "Attempt, outside the luck band"), dot("dim", "var(--s1)", "Attempt, inside the luck band"), dot("diamond", "var(--s2)", "Hand-written baseline")],
-    terrain: [dot("line", "var(--s1)", "Attempts, brighter with higher timing Sharpe"), dot("line", "var(--s2)", "Buy and hold")],
+    terrain: [dot("line", "var(--s1)", "Attempts, stronger with higher timing Sharpe"), dot("line", "var(--s2)", "Buy and hold")],
   })[mode]);
 }
 function fit() {
@@ -325,7 +317,7 @@ function P(x, y, z) {
   const cy = Math.cos(stage.yaw), sy = Math.sin(stage.yaw), cp = Math.cos(stage.pitch), sp = Math.sin(stage.pitch);
   const X = x * cy - y * sy, Y = x * sy + y * cy;
   const depth = Y * cp - z * sp, up = Y * sp + z * cp;
-  const k = 3.6 / (3.6 + depth), S = Math.min(stage.w * 0.3, stage.h * 0.36) * (stage.mode === "lineage" ? 1.28 : 1);
+  const k = 3.6 / (3.6 + depth), S = Math.min(stage.w * 0.3, stage.h * 0.36) * (stage.mode === "lineage" ? 1.22 : 1);
   return {x: stage.w / 2 + X * k * S, y: stage.h * 0.47 - up * k * S, d: depth, k};
 }
 function path(points, close) {
@@ -333,24 +325,29 @@ function path(points, close) {
   points.forEach((p, i) => { const q = P(...p); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
   if (close) ctx.closePath();
 }
-function sheet(z, fill, stroke, dash) {
-  path([[-1, -1, z], [1, -1, z], [1, 1, z], [-1, 1, z]], true);
-  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-  ctx.setLineDash(dash || []); ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+function stroke(color, alpha = 1, width = 1, dash) {
+  ctx.setLineDash(dash || []); ctx.strokeStyle = css(color); ctx.globalAlpha = alpha; ctx.lineWidth = width;
+  ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.lineWidth = 1;
 }
-function gridLines(z, color, n = 8) {
-  ctx.strokeStyle = color; ctx.lineWidth = 1;
+function fill(color, alpha = 1) { ctx.fillStyle = css(color); ctx.globalAlpha = alpha; ctx.fill(); ctx.globalAlpha = 1; }
+function sheet(z, tint, line, dash) {  // tint and line are [colour variable, opacity]
+  path([[-1, -1, z], [1, -1, z], [1, 1, z], [-1, 1, z]], true);
+  if (tint) fill(...tint);
+  stroke(line[0], line[1], 1, dash);
+}
+function gridLines(z, n = 8) {
   for (let i = 1; i < n; i++) {
     const t = -1 + 2 * i / n;
-    path([[t, -1, z], [t, 1, z]]); ctx.stroke();
-    path([[-1, t, z], [1, t, z]]); ctx.stroke();
+    path([[t, -1, z], [t, 1, z]]); stroke("--grid");
+    path([[-1, t, z], [1, t, z]]); stroke("--grid");
   }
 }
-function label(text, pos, align = "center", color = css("--muted")) {
+function label(text, pos, align = "center", color = "--muted") {
   const q = P(...pos);
-  ctx.font = `10.5px ${css("--mono")}`; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillStyle = color;
+  ctx.font = `11.5px ${css("--sans")}`; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillStyle = css(color);
   ctx.fillText(text, q.x, q.y);
 }
+function ringAround(q, r, color) { ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); stroke(color, 1, 1.5); }
 
 /* Lineage: ideas on a disc (sector = family, radius = time, height = score), joined to what they were built on. */
 function buildLineage(attempts) {
@@ -379,98 +376,88 @@ function buildLineage(attempts) {
 }
 function drawLineage() {
   const L = stage.lineage;
-  if (!L || !L.nodes.length) return label("No attempts yet", [0, 0, 0], "center", css("--ink2"));
+  if (!L || !L.nodes.length) return label("No attempts yet", [0, 0, 0], "center", "--ink2");
   const K = L.fams.length, Z = v => v / 3 * 0.66, ring = r => Array.from({length: 73}, (_, i) => [Math.cos(i / 72 * 2 * Math.PI) * r, Math.sin(i / 72 * 2 * Math.PI) * r, 0]);
-  ctx.lineWidth = 1;
-  path(ring(1), true); ctx.fillStyle = "rgba(255,255,255,.025)"; ctx.fill(); ctx.strokeStyle = "rgba(232,238,245,.45)"; ctx.stroke();
-  for (const r of [0.26, 0.5, 0.75]) { path(ring(r), true); ctx.strokeStyle = css("--grid"); ctx.stroke(); }
+  path(ring(1), true); fill("--ink", 0.03); stroke("--axis");
+  for (const r of [0.26, 0.5, 0.75]) { path(ring(r), true); stroke("--grid"); }
   L.fams.forEach((f, k) => {
     const a = k / K * 2 * Math.PI, m = (k + 0.5) / K * 2 * Math.PI;
-    path([[Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0], [Math.cos(a), Math.sin(a), 0]]); ctx.strokeStyle = css("--axis"); ctx.stroke();
-    label(`${plain(f)} · ${L.count[f]}`, [Math.cos(m) * 1.2, Math.sin(m) * 1.2, 0], "center", css("--ink2"));
+    path([[Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0], [Math.cos(a), Math.sin(a), 0]]); stroke("--axis");
+    label(`${plain(f)} · ${L.count[f]}`, [Math.cos(m) * 1.2, Math.sin(m) * 1.2, 0], "center", "--ink2");
   });
-  path([[1, 0, Z(-3)], [1, 0, Z(2)]]); ctx.strokeStyle = css("--axis"); ctx.stroke();
+  path([[1, 0, Z(-3)], [1, 0, Z(2)]]); stroke("--axis");
   for (const v of [-3, -2, -1, 1, 2]) label(signed(v), [1.04, 0, Z(v)], "left");
-  label("timing Sharpe", [1.04, 0, Z(2) + 0.09], "left", css("--ink2"));
+  label("timing Sharpe", [1.04, 0, Z(2) + 0.09], "left", "--ink2");
 
   const hot = stage.hover ?? selected;
   const strand = (a, b) => {
     const A = P(a.x, a.y, a.z), B = P(b.x, b.y, b.z), M = P((a.x + b.x) * 0.3, (a.y + b.y) * 0.3, Math.max(a.z, b.z) + 0.34);
-    ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo(M.x, M.y, B.x, B.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo(M.x, M.y, B.x, B.y);
   };
-  ctx.strokeStyle = css("--s1"); ctx.globalAlpha = Math.max(0.16, Math.min(0.4, 90 / L.edges.length));
-  for (const [a, b] of L.edges) strand(a, b);
-  ctx.strokeStyle = css("--ink"); ctx.globalAlpha = 0.85; ctx.lineWidth = 1.3;
-  for (const [a, b] of L.edges) if (a.id === hot || b.id === hot) strand(a, b);
-  ctx.globalAlpha = 1; ctx.lineWidth = 1;
+  const faint = Math.max(0.14, Math.min(0.4, 90 / L.edges.length));
+  for (const [a, b] of L.edges) { strand(a, b); stroke("--s1", faint); }
+  for (const [a, b] of L.edges) if (a.id === hot || b.id === hot) { strand(a, b); stroke("--ink", 0.8, 1.3); }
 
   const drawn = L.nodes.map(n => ({n, q: P(n.x, n.y, n.z)})).sort((a, b) => b.q.d - a.q.d);
   for (const {n, q} of drawn) {
     const scored = n.score != null, outside = scored && Math.abs(n.score) > 0.5, r = (n.id === stage.hover ? 6 : outside ? 4 : scored ? 3 : 2) * q.k;
     if (outside) {  // a stem to the disc shows which side of zero the dot is on
       const base = P(n.x, n.y, 0);
-      ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(q.x, q.y); ctx.strokeStyle = css("--s1"); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(q.x, q.y); stroke("--s1", 0.22);
     }
-    ctx.globalAlpha = outside ? 1 : scored ? 0.5 : 0.45;
-    ctx.fillStyle = scored ? css("--s1") : css("--muted");
-    ctx.shadowColor = css("--glow"); ctx.shadowBlur = scored && n.score > 0.5 ? 14 : 0;
-    ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-    if (n.kids >= BUILT_ON) { ctx.beginPath(); ctx.arc(q.x, q.y, r + 4, 0, Math.PI * 2); ctx.strokeStyle = css("--warn"); ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1; }
-    if (n.id === selected) { ctx.beginPath(); ctx.arc(q.x, q.y, r + 8, 0, Math.PI * 2); ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1; }
+    ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); fill(scored ? "--s1" : "--muted", outside ? 1 : 0.4);
+    if (n.kids >= BUILT_ON) ringAround(q, r + 4, "--warn");
+    if (n.id === selected) ringAround(q, r + 8, "--ink");
     stage.picks.push({x: q.x, y: q.y, id: n.id, idea: n.idea, lines: [`#${n.id} · ${plain(n.family)}`,
-      (scored ? `timing ${signed(n.score)} · ${Math.round(n.trades)} trades` : (OUTCOME[n.status] || [n.status])[0].toLowerCase()) + (n.kids ? ` · built on ×${n.kids}` : "")]});
+      (scored ? `timing ${signed(n.score)} · ${Math.round(n.trades)} trades` : outcome(n.status).toLowerCase()) + (n.kids ? ` · built on ${n.kids} times` : "")]});
   }
   const named = [];  // name the most built-on attempts, skipping any label that would sit on an earlier one
   for (const n of L.nodes.filter(n => n.kids >= BUILT_ON).sort((a, b) => b.kids - a.kids)) {
     const q = P(n.x, n.y, n.z + 0.1);
-    if (named.length < 5 && named.every(o => Math.abs(o.x - q.x) > 64 || Math.abs(o.y - q.y) > 13)) { named.push(q); label(`#${n.id} ×${n.kids}`, [n.x, n.y, n.z + 0.1], "center", css("--ink")); }
+    if (named.length < 3 && named.every(o => Math.abs(o.x - q.x) > 64 || Math.abs(o.y - q.y) > 13)) { named.push(q); label(`#${n.id} ×${n.kids}`, [n.x, n.y, n.z + 0.1], "center", "--ink"); }
   }
 }
 
 function drawSpace() {
   const pts = stage.points, FLOOR = -0.85;
-  if (!pts.length) return label("No backtested attempts yet", [0, 0, 0], "center", css("--ink2"));
-  const zmax = Math.max(1.5, ...pts.map(p => Math.abs(p.score)));
-  const Z = v => v / zmax * 0.85;
+  if (!pts.length) return label("No backtested attempts yet", [0, 0, 0], "center", "--ink2");
+  const zmax = Math.min(3, Math.max(1.5, ...pts.map(p => Math.abs(p.score))));  // fee disasters far below −3 would flatten everything else
+  const Z = v => Math.max(-zmax, Math.min(zmax, v)) / zmax * 0.85;
   const tmax = Math.max(3.4, ...pts.map(p => Math.log10(p.trades)));
   const X = t => -1 + 2 * (Math.log10(Math.max(t, 1)) / tmax), Y = m => -1 + 2 * m;
-  sheet(FLOOR, null, css("--axis")); gridLines(FLOOR, css("--grid"));
-  sheet(Z(-0.5), "rgba(57,135,229,.045)", "rgba(108,180,255,.45)", [5, 5]);
-  sheet(0, "rgba(255,255,255,.04)", "rgba(232,238,245,.55)"); gridLines(0, "rgba(232,238,245,.07)");
-  sheet(Z(0.5), "rgba(57,135,229,.045)", "rgba(108,180,255,.45)", [5, 5]);
-  path([[-1, 1, FLOOR], [-1, 1, 0.9]]); ctx.strokeStyle = css("--axis"); ctx.stroke();
-  for (const v of [-0.5, 0, 0.5, 1, -1, 2, -2].filter(v => Math.abs(v) <= zmax))
-    label(v ? signed(v) : "0 · no skill", [-1.06, 1, Z(v)], "right", v ? css("--muted") : css("--ink2"));
-  label("timing Sharpe", [-1.06, 1, 0.98], "right", css("--ink2"));
+  sheet(FLOOR, null, ["--axis", 1]); gridLines(FLOOR);
+  sheet(Z(-0.5), ["--s1", 0.05], ["--s1", 0.5], [5, 5]);
+  sheet(0, ["--ink", 0.04], ["--ink2", 0.8]);
+  sheet(Z(0.5), ["--s1", 0.05], ["--s1", 0.5], [5, 5]);
+  path([[-1, 1, FLOOR], [-1, 1, 0.9]]); stroke("--axis");
+  for (const v of (zmax > 2 ? [-3, -2, -1, 0, 1, 2, 3] : [-0.5, 0, 0.5, 1, -1, 2, -2]).filter(v => Math.abs(v) <= zmax))
+    label(v ? signed(v) : "0 · no skill", [-1.06, 1, Z(v)], "right", v ? "--muted" : "--ink2");
+  label("timing Sharpe", [-1.06, 1, 0.98], "right", "--ink2");
   for (const t of [10, 100, 1000].filter(t => Math.log10(t) <= tmax)) label(t.toLocaleString(), [X(t), -1.12, FLOOR]);
-  label("trades per symbol →", [0, -1.3, FLOOR], "center", css("--ink2"));
+  label("trades per symbol →", [0, -1.3, FLOOR], "center", "--ink2");
   for (const m of [0, 0.5, 1]) label(pct(m), [1.1, Y(m), FLOOR], "left");
-  label("time in market →", [1.34, 0, FLOOR], "left", css("--ink2"));
+  label("time in market →", [1.34, 0, FLOOR], "left", "--ink2");
 
   const drawn = pts.map(p => ({p, top: P(X(p.trades), Y(p.pos), Z(p.score)), base: P(X(p.trades), Y(p.pos), 0)})).sort((a, b) => b.top.d - a.top.d);
   for (const {p, top, base} of drawn) {
-    const color = p.baseline ? css("--s2") : css("--s1"), outside = Math.abs(p.score) > 0.5, r = (p.id === stage.hover ? 7 : 5) * top.k;
-    ctx.globalAlpha = outside ? 0.7 : 0.3;
-    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
-    ctx.globalAlpha = outside ? 1 : 0.45;
-    ctx.shadowColor = color; ctx.shadowBlur = outside ? 16 : 0; ctx.fillStyle = color;
+    const color = p.baseline ? "--s2" : "--s1", outside = Math.abs(p.score) > 0.5, r = (p.id === stage.hover ? 7 : 5) * top.k;
+    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); stroke(color, outside ? 0.6 : 0.25);
     ctx.beginPath();
     if (p.baseline) { ctx.moveTo(top.x, top.y - r * 1.25); ctx.lineTo(top.x + r * 1.25, top.y); ctx.lineTo(top.x, top.y + r * 1.25); ctx.lineTo(top.x - r * 1.25, top.y); ctx.closePath(); }
     else ctx.arc(top.x, top.y, r, 0, Math.PI * 2);
-    ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-    ctx.strokeStyle = css("--surface"); ctx.lineWidth = 1.5; ctx.stroke();
-    if (p.id === selected) { ctx.beginPath(); ctx.arc(top.x, top.y, r + 5, 0, Math.PI * 2); ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.5; ctx.stroke(); }
+    fill(color, outside ? 1 : 0.4); stroke("--surface", 1, 1.5);  // the ring keeps overlapping dots apart
+    if (p.id === selected) ringAround(top, r + 5, "--ink");
     stage.picks.push({x: top.x, y: top.y, id: p.id, lines: [`#${p.id} · ${p.family}`, `timing ${signed(p.score)} · ${Math.round(p.trades)} trades · in market ${pct(p.pos)}`], idea: p.idea});
   }
 }
 
 function drawTerrain() {
   const c = stage.curves, BASE = -0.8;
-  if (!c || !c.curves.length) return label("No backtested attempts yet", [0, 0, 0], "center", css("--ink2"));
+  if (!c || !c.curves.length) return label("No backtested attempts yet", [0, 0, 0], "center", "--ink2");
   const all = c.curves.flatMap(r => r.eq).concat(c.benchmark).map(Math.log), lo = Math.min(...all), hi = Math.max(...all);
   const n = c.dates.length, m = c.curves.length;
   const X = i => -1 + 2 * i / (n - 1), Z = v => BASE + (Math.log(v) - lo) / ((hi - lo) || 1) * 1.6;
-  sheet(BASE, null, css("--axis")); gridLines(BASE, css("--grid"));
+  sheet(BASE, null, ["--axis", 1]); gridLines(BASE);
   // Few attempts sit close together like a terrain; many spread over the whole depth.
   const gap = m > 1 ? Math.min(0.14, 1.75 / (m - 1)) : 0, front = -gap * (m - 1) / 2;
   const ridges = c.curves.map((r, j) => ({...r, y: front + gap * j, rank: m > 1 ? j / (m - 1) : 1}));
@@ -479,30 +466,24 @@ function drawTerrain() {
   for (const r of ridges) {
     const top = r.eq.slice(0, n).map((v, i) => [X(i), r.y, Z(v)]);
     if (!r.bench) {  // each ridge's wall hides the ones behind it; the reference line stays see-through
-      path(top.concat([[X(top.length - 1), r.y, BASE], [-1, r.y, BASE]]), true);
-      ctx.fillStyle = "rgba(9,14,21,.8)"; ctx.fill();
+      path(top.concat([[X(top.length - 1), r.y, BASE], [-1, r.y, BASE]]), true); fill("--surface", 0.85);
     }
     path(top);
     const hot = r.id != null && (r.id === selected || r.id === stage.hover);
-    ctx.strokeStyle = hot ? css("--ink") : r.bench ? css("--s2") : css("--s1");
-    ctx.globalAlpha = hot || r.bench ? 1 : 0.3 + 0.7 * r.rank; ctx.lineWidth = hot || r.bench ? 2 : 1.3;
-    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = hot ? 14 : r.bench ? 8 : 0;
-    ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-    if (r.bench) { const q = top[top.length - 1]; label("buy & hold", [q[0] + 0.05, q[1], q[2]], "left", css("--ink2")); continue; }
+    stroke(hot ? "--ink" : r.bench ? "--s2" : "--s1", hot || r.bench ? 1 : 0.3 + 0.7 * r.rank, hot || r.bench ? 2 : 1.3);
+    if (r.bench) { const q = top[top.length - 1]; label("buy & hold", [q[0] + 0.05, q[1], q[2]], "left", "--ink2"); continue; }
     for (let i = 0; i < top.length; i += 3) { const q = P(...top[i]); stage.picks.push({x: q.x, y: q.y, id: r.id, lines: [`#${r.id} · ${plain(r.family)}`, `timing ${signed(r.timing)} · ${c.dates[i]} · ${r.eq[i].toFixed(2)}×`]}); }
   }
   // Labels last, so no ridge wall paints over them.
   c.dates.forEach((d, i) => { if (i && d.slice(0, 4) !== c.dates[i - 1].slice(0, 4)) label(d.slice(0, 4), [X(i), -1.15, BASE]); });
   for (const v of [1, 2, 5, 10, 20, 50].filter(v => Math.log(v) >= lo && Math.log(v) <= hi)) label(v + "×", [-1.06, 1, Z(v)], "right");
-  label("growth of 1", [-1.06, 1, BASE + 1.72], "right", css("--ink2"));
+  label("growth of 1", [-1.06, 1, BASE + 1.72], "right", "--ink2");
 }
 
 function draw() {
   stage.picks = [];
   ctx.clearRect(0, 0, stage.w, stage.h);
   ({lineage: drawLineage, space: drawSpace, terrain: drawTerrain})[stage.mode]();
-  const deg = r => ((r * 180 / Math.PI) % 360 + 360) % 360;
-  $("hud-cam").textContent = `yaw ${deg(stage.yaw).toFixed(1)}° · pitch ${deg(stage.pitch).toFixed(1)}°`;
   stage.dirty = false;
 }
 function frame() {
@@ -533,21 +514,20 @@ box.onpointerup = e => { const d = stage.drag; stage.drag = null; box.classList.
 box.onpointerleave = () => { if (!stage.drag) { stage.hover = null; tip3d.style.display = "none"; stage.dirty = true; } };
 for (const m of Object.keys(TEXT)) $("mode-" + m).onclick = () => setMode(m);
 $("spin").onclick = () => { stage.spin = !stage.spin; $("spin").setAttribute("aria-pressed", stage.spin); };
-$("spin").setAttribute("aria-pressed", stage.spin);
 new ResizeObserver(fit).observe(cv);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { cssCache = {}; stage.dirty = true; });  // the canvas reads its colours once
 
-// The box in the corner of the stage names the selected attempt, like a target lock.
-function callout() {
-  const a = stage.byId.get(selected), el = $("callout");
-  if (!a) return el.hidden = true;
+// The line under the 3D view that names the selected attempt.
+function picked() {
+  const a = stage.byId.get(selected);
+  if (!a) return $("picked").replaceChildren();
   const node = stage.lineage && stage.lineage.byId.get(a.id);
-  el.hidden = false;
-  el.replaceChildren(h("b", {}, `Selected #${a.id} · ${plain(a.family)}`), h("br"),
-    a.timing_sharpe == null ? (OUTCOME[a.status] || [a.status])[0] : `timing ${signed(a.timing_sharpe)} · ${Math.round(a.trades_per_symbol)} trades · in market ${pct(a.mean_position)}`,
-    node && node.kids ? ` · built on ×${node.kids}` : "");
+  $("picked").replaceChildren(h("b", {}, `Selected: #${a.id}, ${plain(a.family)}. `),
+    a.timing_sharpe == null ? outcome(a.status) + "." : `Timing ${signed(a.timing_sharpe)}, ${Math.round(a.trades_per_symbol)} trades, in the market ${pct(a.mean_position)} of the time.`,
+    node && node.kids ? ` ${node.kids} later ideas were built on it.` : "");
 }
 
-/* ---------- panels ---------- */
+/* ---------- sections ---------- */
 // rows: [label, share 0..1 or null when locked, text on the right, tooltip]
 function meter(id, rows, emptyText) {
   const out = [];
@@ -558,112 +538,78 @@ function meter(id, rows, emptyText) {
   }
   $(id).replaceChildren(...(out.length ? out : [h("div", {class: "empty", style: "grid-column:1/-1"}, emptyText || "Nothing yet.")]));
 }
-// A strip of thin bars, one per time bucket, each with its own tooltip.
-function strip(id, values, titles, H) {
-  if (!values.length) return $(id).replaceChildren(h("div", {class: "empty"}, "Nothing yet."));
-  const W = 1200, top = Math.max(...values) || 1, w = W / values.length;
-  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", style: `height:${H}px`, role: "img"});
-  g.append(s("line", {x1: 0, x2: W, y1: H - 0.5, y2: H - 0.5, stroke: "var(--axis)", "vector-effect": "non-scaling-stroke"}));
-  values.forEach((v, i) => {
-    const bh = Math.max(1, v / top * (H - 4));
-    const bar = s("rect", {x: i * w + w * 0.12, y: H - bh, width: w * 0.76, height: bh, fill: "var(--s1)", opacity: 0.55 + 0.45 * v / top});
-    bar.append(s("title", {}, titles[i])); g.append(bar);
-  });
-  $(id).replaceChildren(g);
-}
 
-function header(d) {
-  const t = d.tele, f = d.funnel || {};
-  const item = (k, v) => h("span", {}, k + " ", h("b", {}, String(v)));
-  $("stats").replaceChildren(...(t ? [
-    item("attempts", (f.generated || 0).toLocaleString()), item("ideas", t.span.ideas.toLocaleString()),
-    item("counted in N", t.span.counted ? t.span.counted.toLocaleString() : "0 (pilot)"),
-    item("model", t.span.model || "hand-written"), item("prompts", t.span.prompts || "–"),
-  ] : [h("span", {}, "no attempts logged yet")]));
-}
-
-function pipe(d) {
-  const t = d.tele, f = d.funnel || {};
-  const n = Object.fromEntries((t ? t.statuses : []).map(r => [r.status, r.n])), g = (...ks) => ks.reduce((sum, k) => sum + (n[k] || 0), 0);
-  const calls = Object.fromEntries((t ? t.llm : []).map(r => [r.role, r.calls]));
-  const scored = t ? t.span.scored : 0, passed = f.gate_all || 0;
-  const stages = [
-    ["agents.propose", t ? t.span.ideas : 0, "ideas", [], "The researcher agent proposes an idea."],
-    ["agents.write_code", calls.coder || 0, "calls", [], "The coder agent turns the idea into a strategy function, and rewrites it when a check sends it back."],
-    ["static_check", g("static_reject"), "stopped", ["static_reject"], "Stopped before running: a banned import, a file read or a hard-coded year."],
-    ["sandbox.run", g("crash", "timeout", "bad_output"), "stopped", ["crash", "timeout", "bad_output"], "Crashed, timed out or returned the wrong shape inside the container."],
-    ["lookahead", g("lookahead"), "stopped", ["lookahead"], "Positions changed when later bars were removed, so the code used the future."],
-    ["backtest.evaluate", g("no_trades", "too_few_trades", "duplicate"), "stopped", ["no_trades", "too_few_trades", "duplicate"], "Never traded, traded too little to score, or duplicated an earlier strategy."],
-    ["gate: timing > 0", scored - passed, "stopped", ["below"], "Backtested, but no better than holding the same average position."],
-    ["passed the gate", passed, "passed", ["above"], "Timing Sharpe above zero on discovery. In-sample only."],
-    ["agents.review", calls.reviewer || 0, "reviews", [], "The reviewer agent turns each batch of results into notes for the researcher."],
-  ];
-  const newest = d.attempts[0];
-  const at = !newest ? null : newest.status !== "ok" ? newest.status : newest.timing_sharpe > 0 ? "above" : "below";
-  const fresh = newest && Date.now() - new Date(newest.created_at + "Z") < 120000;
-  $("pipe").replaceChildren(...stages.map(([name, count, unit, keys, title]) => {
-    const here = keys.includes(at);
-    return h("div", {class: (here ? "hot" : "") + (here && fresh ? " fresh" : ""), title: title + (here ? ` The newest attempt, #${newest.id}, ended here.` : "")},
-      h("div", {class: "name"}, name), h("div", {class: "val"}, h("b", {}, count.toLocaleString()), unit));
-  }));
-}
-
-function telemetry(d) {
-  const t = d.tele, f = d.funnel || {};
-  if (!t) { for (const id of ["pace", "flow"]) strip(id, [], [], 40); for (const id of ["families", "llm", "stops"]) meter(id, []); $("read").replaceChildren(); $("mosaic").replaceChildren(); return; }
-  const hours = Math.max((new Date(t.span.last) - new Date(t.span.first)) / 36e5, 1 / 60);
-  strip("pace", t.pace.map(p => p.n), t.pace.map(p => `${clock(p.t)}: ${p.n} attempts`), 44);
-  $("pace-n").replaceChildren(h("b", {}, String(Math.round(f.generated / hours))), " an hour");
-
-  const fmax = Math.max(...t.families.map(r => r.n));
-  meter("families", t.families.map(r => [plain(r.family), r.n / fmax, `${r.n} · ${r.median == null ? "no score" : signed(r.median)}`,
-    `${plain(r.family)}: ${r.n} attempts, ${r.scored} backtested, median ${signed(r.median)}, best ${signed(r.best)}`]));
-
-  const secs = t.llm.reduce((sum, r) => sum + (r.seconds || 0), 0) || 1;
-  meter("llm", t.llm.map(r => [r.role, r.seconds / secs, `${pct(r.seconds / secs)} · ${r.calls} calls`, `${r.role}: ${r.calls} calls, ${(r.seconds / 60).toFixed(1)} minutes, ${big(r.tokens || 0)} tokens written`]), "No model calls logged.");
-  $("llm-n").replaceChildren(h("b", {}, (secs / 3600).toFixed(1) + " h"), " of model time");
-
-  const cell = (k, v) => h("div", {}, h("dt", {}, k), h("dd", {}, v));
-  $("read").replaceChildren(
-    cell("best", signed(f.best)), cell("luck alone", t.span.scored > 1 ? signed(t.luck) : "–"), cell("median", signed(t.span.median)),
-    cell("over 1,000 trades", t.span.scored ? pct(t.span.heavy / t.span.scored) : "–"), cell("backtested", String(t.span.scored)),
-    cell("sandbox time", f.median_seconds == null ? "–" : f.median_seconds.toFixed(1) + " s"));
-
-  $("mosaic").replaceChildren(...d.attempts.slice(0, 144).reverse().map(a => {
-    const [label, level] = OUTCOME[a.status] || [a.status, "warn"];
-    const c = h("i", {class: level, title: `#${a.id} · ${label}${a.timing_sharpe == null ? "" : " · timing " + signed(a.timing_sharpe)}`});
-    c.onclick = () => show(a.id);
-    return c;
-  }));
-
-  strip("flow", t.flow.map(p => p.n || 0), t.flow.map(p => `${clock(p.t)}: ${(p.n || 0).toLocaleString()} tokens`), 56);
-  const tokens = t.flow.reduce((sum, p) => sum + (p.n || 0), 0);
-  $("flow-n").replaceChildren(...(t.flow.length ? [h("b", {}, big(tokens / t.flow.length)), " a minute · ", h("b", {}, big(tokens)), ` in total · ${clock(t.flow[0].t)} to ${clock(t.flow[t.flow.length - 1].t)}`] : []));
-
-  const stops = t.statuses.filter(r => r.status !== "ok"), total = stops.reduce((sum, r) => sum + r.n, 0);
-  let run = 0;
-  meter("stops", stops.map(r => { run += r.n; return [chip(r.status), r.n / stops[0].n, `${r.n} · ${pct(run / total)}`, `${(OUTCOME[r.status] || [r.status])[0]}: ${r.n} of ${total} rejected attempts`]; }), "Nothing has been rejected yet.");
+function summary(d) {
+  const t = d.tele, f = d.funnel || {}, runs = d.runs.find(r => r.run_id === $("run").value);
+  if (!t) {
+    $("verdict").textContent = "No attempts have been logged yet.";
+    $("verdict-why").textContent = "Start a run with: python generate.py --ideas ideas.txt";
+    $("meta").textContent = ""; $("tiles").replaceChildren();
+    return;
+  }
+  const n = t.span.scored, best = f.best, luck = t.luck;
+  $("meta").textContent = [runs ? `${runs.run_id}, ${runs.pilot ? "a pilot run that does not count toward the trial count" : "an official run"}` : "All runs together",
+    t.span.model || "hand-written strategies", t.span.prompts ? "prompts " + t.span.prompts : null, `${clock(t.span.first)} to ${clock(t.span.last)}`].filter(Boolean).join(" · ");
+  if (n < 2 || best == null) {
+    $("verdict").textContent = "Too few ideas have been backtested to say anything yet.";
+    $("verdict-why").textContent = `${n} backtested so far.`;
+  } else {
+    // The comparison is between two numbers the server computed; nothing here is a model's opinion.
+    $("verdict").textContent = best <= luck ? "Nothing in this run beats what luck alone would produce."
+                                            : "The best score is above the luck benchmark. That is a reason to validate it, not evidence that it works.";
+    $("verdict-why").textContent = `The best of ${n.toLocaleString()} backtested ideas scored ${signed(best)}. The best of ${n.toLocaleString()} ideas with no skill at all is expected to score about ${signed(luck)}.`;
+  }
+  const tile = (k, v, note) => h("div", {}, h("div", {class: "k"}, k), h("div", {class: "v"}, v), h("div", {class: "n"}, note));
+  $("tiles").replaceChildren(
+    tile("Attempts", (f.generated || 0).toLocaleString(), `on ${t.span.ideas.toLocaleString()} ideas, up to three tries each`),
+    tile("Backtested", n.toLocaleString(), f.generated ? `${pct(n / f.generated)} of attempts reached a score` : ""),
+    tile("Best timing Sharpe", signed(best), n > 1 ? `luck alone: about ${signed(luck)}` : "in-sample"),
+    tile("Lost to trading fees", n ? pct(t.span.heavy / n) : "–", "of backtested ideas made over 1,000 trades"));
 }
 
 function funnel(d) {
   const f = d.funnel || {}, n = f.generated || 0, det = d.locks.detector, w = d.week5;
   const stages = [
     ["Generated", f.generated],
-    ["Static check", f.static_ok],
-    ["Ran in sandbox", f.ran],
-    ["Look-ahead test", det ? f.lookahead_ok : null, "detector not built"],
-    ["Discovery gate", det ? f.gate_checked : f.gate_all],
-    ["Validation shortlist", w.shortlisted, "locked"],
-    ["Survived holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened" : "locked"],
+    ["Passed the static check", f.static_ok],
+    ["Ran in the sandbox", f.ran],
+    ["Passed the look-ahead test", det ? f.lookahead_ok : null, "detector not built"],
+    ["Scored above zero", det ? f.gate_checked : f.gate_all],
+    ["Validation shortlist", w.shortlisted, "locked until generation is frozen"],
+    ["Survived the holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened: see results/" : "locked: data not downloaded"],
   ];
   meter("funnel", stages.map(([label, count, why]) => count == null ? [label, null, why, why]
     : [label, n ? count / n : 0, h("span", {}, String(count), " ", h("small", {}, n ? pct(count / n) : "")), `${label}: ${count} of ${n}`]));
+  const stops = d.tele ? d.tele.statuses.filter(r => r.status !== "ok") : [], total = stops.reduce((sum, r) => sum + r.n, 0);
+  let run = 0;
+  meter("stops", stops.map(r => { run += r.n; return [chip(r.status), r.n / stops[0].n, h("span", {}, String(r.n), " ", h("small", {}, pct(run / total))), `${outcome(r.status)}: ${r.n} of ${total} rejected attempts`]; }), "Nothing has been rejected yet.");
+}
+
+function activity(d) {
+  const t = d.tele, f = d.funnel || {};
+  if (!t) { $("pace").replaceChildren(h("div", {class: "empty"}, "Nothing yet.")); meter("llm", []); return; }
+  const values = t.pace.map(p => p.n), W = 560, H = 120, B = 20, top = Math.max(...values), w = W / values.length;
+  const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Attempts logged in each five-minute interval"});
+  g.append(s("line", {x1: 0, x2: W, y1: H - B, y2: H - B, stroke: "var(--axis)"}));
+  values.forEach((v, i) => {
+    const bh = Math.max(1, v / top * (H - B - 6)), bw = Math.max(1, w - 2), r = Math.min(3, bw / 2, bh);
+    const bar = s("path", {d: `M${i * w + 1} ${H - B}v${-(bh - r)}q0 ${-r} ${r} ${-r}h${bw - 2 * r}q${r} 0 ${r} ${r}v${bh - r}z`, fill: "var(--s1)"});
+    bar.append(s("title", {}, `${clock(t.pace[i].t)}: ${v} attempts`)); g.append(bar);
+  });
+  g.append(s("text", {x: 0, y: H - 5}, clock(t.pace[0].t)), s("text", {x: W, y: H - 5, "text-anchor": "end"}, clock(t.pace[t.pace.length - 1].t)));
+  $("pace").replaceChildren(g);
+  const hours = Math.max((new Date(t.span.last) - new Date(t.span.first)) / 36e5, 1 / 60);
+  $("pace-n").replaceChildren(h("b", {}, String(Math.round(f.generated / hours))), " an hour");
+  const secs = t.llm.reduce((sum, r) => sum + (r.seconds || 0), 0) || 1;
+  meter("llm", t.llm.map(r => [r.role[0].toUpperCase() + r.role.slice(1), r.seconds / secs, h("span", {}, pct(r.seconds / secs), " ", h("small", {}, `${r.calls} calls`)),
+    `${r.role}: ${r.calls} calls, ${(r.seconds / 60).toFixed(1)} minutes, ${big(r.tokens || 0)} tokens written`]), "No model calls logged.");
+  $("llm-n").replaceChildren(...(t.llm.length ? [h("b", {}, (secs / 3600).toFixed(1) + " hours"), " in total"] : []));
 }
 
 function ranges(d) {
   const fams = d.tele ? d.tele.families.filter(r => r.scored) : [];
   if (!fams.length) return $("ranges").replaceChildren(h("div", {class: "empty"}, "No backtested attempts yet."));
-  const luck = d.tele.luck, W = 560, L = 112, R = 18, T = 20, ROW = 25, H = T + fams.length * ROW + 22;
+  const luck = d.tele.luck, W = 560, L = 150, R = 18, T = 22, ROW = 27, H = T + fams.length * ROW + 22;
   const lo = Math.max(-6, Math.floor(Math.min(0, ...fams.map(r => r.median)))), hi = Math.max(2, Math.ceil(Math.max(luck, ...fams.map(r => r.best))));
   const X = v => L + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - L - R);
   const g = s("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Median and best timing Sharpe for each strategy family"});
@@ -677,13 +623,13 @@ function ranges(d) {
   }
   fams.forEach((r, i) => {
     const y = T + i * ROW + ROW / 2;
-    g.append(s("text", {x: L - 12, y: y + 4, "text-anchor": "end", class: "lab"}, plain(r.family)));
+    g.append(s("text", {x: L - 14, y: y + 4, "text-anchor": "end", class: "lab"}, `${plain(r.family)} (${r.scored})`));
     g.append(s("line", {x1: X(r.median), x2: X(r.best), y1: y, y2: y, stroke: "var(--s1)", "stroke-width": 2}));
     if (r.median < lo) g.append(s("text", {x: X(lo) - 4, y: y + 4, "text-anchor": "end"}, "◂"));
     g.append(s("circle", {cx: X(r.median), cy: y, r: 5, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2}));
     g.append(s("circle", {cx: X(r.best), cy: y, r: 5, fill: "var(--surface)", stroke: "var(--s1)", "stroke-width": 2}));
     const hit = s("rect", {x: 0, y: y - ROW / 2, width: W, height: ROW, fill: "transparent"});
-    hit.append(s("title", {}, `${plain(r.family)}: median ${signed(r.median)}, best ${signed(r.best)}, ${r.scored} backtested`));
+    hit.append(s("title", {}, `${plain(r.family)}: median ${signed(r.median)}, best ${signed(r.best)}, ${r.scored} backtested of ${r.n} attempts`));
     g.append(hit);
   });
   $("ranges").replaceChildren(g);
@@ -691,21 +637,24 @@ function ranges(d) {
 
 function lessons(d) {
   if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first one comes after 20 attempts."));
-  $("lessons").replaceChildren(...d.lessons.map(note => {
-    const box = h("div", {}, h("h4", {}, `${note.run_id} · after attempt #${note.after_attempt}`));
+  const one = note => {
+    const box = h("div", {class: "notes"}, h("h3", {}, `After attempt #${note.after_attempt}`));
     for (const line of note.text.split("\n")) {  // stored as "Worked: a | b" lines
       const cut = line.indexOf(":");
       if (cut < 0) continue;
-      box.append(h("b", {}, line.slice(0, cut).trim()), h("ul", {}, ...line.slice(cut + 1).split(" | ").map(item => h("li", {}, item.trim()))));
+      box.append(h("b", {}, {Worked: "What worked", Failed: "What failed", Next: "What to try next"}[line.slice(0, cut).trim()] || line.slice(0, cut).trim()),
+                 h("ul", {}, ...line.slice(cut + 1).split(" | ").map(item => h("li", {}, item.trim()))));
     }
     return box;
-  }));
+  };
+  const [latest, ...older] = d.lessons;
+  $("lessons").replaceChildren(one(latest), ...(older.length ? [h("details", {}, h("summary", {}, `Earlier notes (${older.length})`), ...older.map(one))] : []));
 }
 
 function hist(d) {
   const xs = d.scores.filter(x => x != null);
   if (!xs.length) return $("hist").replaceChildren(h("div", {class: "empty"}, "No backtested attempts yet."));
-  const step = 0.25, W = 560, H = 215, L = 30, R = 8, T = 22, B = 26;
+  const step = 0.25, W = 560, H = 230, L = 30, R = 8, T = 24, B = 26;
   const lo = Math.min(-1, Math.floor(Math.min(...xs) / step) * step), hi = Math.max(1, Math.ceil((Math.max(...xs) + 1e-9) / step) * step);
   const bins = Array(Math.round((hi - lo) / step)).fill(0);
   for (const x of xs) bins[Math.min(bins.length - 1, Math.floor((x - lo) / step))]++;
@@ -725,7 +674,7 @@ function hist(d) {
   const every = (hi - lo) > 12 ? 2 : (hi - lo) > 6 ? 1 : 0.5;
   for (let v = Math.ceil(lo / every) * every; v <= hi + 1e-9; v += every)
     g.append(s("text", {x: X(v), y: H - 8, "text-anchor": "middle", class: Math.abs(v) < 1e-9 ? "lab" : ""}, minus(v.toFixed(every < 1 ? 1 : 0))));
-  g.append(s("line", {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: "var(--axis)", "stroke-dasharray": "3 3"}));
+  g.append(s("line", {x1: X(0), x2: X(0), y1: T, y2: H - B, stroke: "var(--axis)"}));
   if (d.tele && d.tele.span.scored > 1) {  // the score the best of this many no-skill strategies is expected to reach
     const luck = d.tele.luck;
     g.append(s("line", {x1: X(luck), x2: X(luck), y1: T - 6, y2: H - B, stroke: "var(--ink2)", "stroke-dasharray": "4 3"}));
@@ -735,7 +684,10 @@ function hist(d) {
 }
 
 function table(d) {
-  $("rows").replaceChildren(...d.attempts.map(a => {
+  const want = $("filter").value, shown = d.attempts.filter(a => !want || a.status === want);
+  if ($("order").value === "best") shown.sort((x, y) => (y.timing_sharpe ?? -Infinity) - (x.timing_sharpe ?? -Infinity));
+  $("count").textContent = `Showing ${shown.length.toLocaleString()} of ${d.attempts.length.toLocaleString()} attempts${d.attempts.length === 1000 ? " (the newest 1,000)" : ""}. Select a row to see its idea, code and equity curve.`;
+  $("rows").replaceChildren(...shown.map(a => {
     const tr = h("tr", {"aria-selected": a.id === selected ? "true" : "false", tabindex: 0, "data-id": a.id},
       h("td", {}, String(a.id), a.tries ? h("span", {class: "tag"}, ` retry ${a.tries}`) : ""),
       h("td", {}, clock(a.created_at)),
@@ -744,12 +696,12 @@ function table(d) {
       h("td", {}, chip(a.status)),
       h("td", {class: "r"}, signed(a.timing_sharpe)),
       h("td", {class: "r"}, signed(a.net_sharpe)),
-      h("td", {class: "r"}, a.trades_per_symbol == null ? "–" : Math.round(a.trades_per_symbol).toString()));
+      h("td", {class: "r"}, a.trades_per_symbol == null ? "–" : Math.round(a.trades_per_symbol).toLocaleString()));
     tr.onclick = () => show(a.id);
     tr.onkeydown = e => { if (e.key === "Enter") show(a.id); };
     return tr;
   }));
-  if (!d.attempts.length) $("rows").append(h("tr", {}, h("td", {colspan: 8, class: "empty"}, "No attempts logged yet. Start one with: python generate.py --ideas ideas.txt")));
+  if (!shown.length) $("rows").append(h("tr", {}, h("td", {colspan: 8, class: "empty"}, d.attempts.length ? "No attempts with this outcome." : "No attempts logged yet. Start one with: python generate.py --ideas ideas.txt")));
 }
 
 function equityChart(eq, bench) {
@@ -794,26 +746,26 @@ function equityChart(eq, bench) {
   };
   hit.onpointerleave = () => { tip.style.display = "none"; for (const el of [cross, dotS, dotB]) el.setAttribute("visibility", "hidden"); };
   return h("div", {},
-    h("div", {class: "legend"}, h("span", {}, h("i", {class: "line", style: "background:var(--s1)"}), "This strategy, after fees"), h("span", {}, h("i", {class: "line", style: "background:var(--s2)"}), "Buy and hold")),
+    h("div", {class: "legend", style: "margin-bottom:8px"}, h("span", {}, h("i", {class: "line", style: "background:var(--s1)"}), "This strategy, after fees"), h("span", {}, h("i", {class: "line", style: "background:var(--s2)"}), "Buy and hold")),
     wrap);
 }
 
 async function show(id) {
-  selected = id; stage.dirty = true; callout();
+  selected = id; stage.dirty = true; picked();
   for (const tr of $("rows").children) tr.setAttribute("aria-selected", tr.dataset.id === String(id) ? "true" : "false");
   const res = await fetch("/api/attempt/" + id);
   if (!res.ok) return;
   const {attempt: a, benchmark} = await res.json();
   const kids = [
-    h("div", {class: "head"}, h("h2", {}, `Attempt #${a.id} · ${plain(a.family)}`), chip(a.status)),
-    h("p", {class: "sub"}, `${a.run_id}${a.pilot ? " (pilot)" : ""} · ${a.model || "hand-written"} · prompts ${a.prompt_version || "–"} · look-ahead test: ${a.lookahead || "not reached"}`),
+    h("div", {class: "row"}, h("h3", {}, `Attempt #${a.id} · ${plain(a.family)}`), chip(a.status)),
+    h("p", {class: "sub", style: "margin:0"}, `${a.run_id}${a.pilot ? " (pilot)" : ""} · ${a.model || "hand-written"} · prompts ${a.prompt_version || "–"} · look-ahead test: ${a.lookahead || "not reached"}`),
     h("p", {class: "idea-text"}, a.hypothesis || ""),
   ];
   if (a.error) kids.push(h("pre", {class: "err"}, a.error));
   if (a.timing_sharpe != null) {
-    const dl = h("dl", {class: "facts"});
+    const dl = h("dl");
     for (const [k, v] of [["Timing Sharpe", signed(a.timing_sharpe)], ["Net Sharpe", signed(a.net_sharpe)], ["Total return", pct(a.total_return)],
-                          ["Max drawdown", pct(a.max_drawdown)], ["Trades / symbol", fmt(a.trades_per_symbol, 0)], ["Mean position", fmt(a.mean_position)]])
+                          ["Max drawdown", pct(a.max_drawdown)], ["Trades per symbol", fmt(a.trades_per_symbol, 0)], ["Time in market", pct(a.mean_position)]])
       dl.append(h("div", {}, h("dt", {}, k), h("dd", {}, v)));
     kids.push(dl);
   }
@@ -833,17 +785,16 @@ async function refresh() {
     }
     $("run").replaceChildren(h("option", {value: ""}, "All runs"), ...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
     $("run").value = run;
-    pipe(d);  // every time: its highlight depends on the clock
     const key = [run, d.funnel ? d.funnel.generated : 0, d.lessons.length, d.locks.holdout_opened, d.week5.shortlisted].join("|");
     if (key !== stateKey) {  // nothing new was logged: leave the page as it is
-      stateKey = key;
-      header(d); telemetry(d); funnel(d); ranges(d); hist(d); table(d); lessons(d);
+      stateKey = key; last = d;
+      summary(d); funnel(d); hist(d); ranges(d); activity(d); lessons(d); table(d);
       stage.byId = new Map(d.attempts.map(a => [a.id, a]));
       stage.lineage = buildLineage(d.attempts);
       stage.points = d.attempts.filter(a => a.timing_sharpe != null && a.trades_per_symbol > 0).map(a => ({
         id: a.id, score: a.timing_sharpe, trades: a.trades_per_symbol, pos: a.mean_position ?? 0, baseline: a.run_id === "baselines",
         family: plain(a.family), idea: (a.hypothesis || "").slice(0, 140)}));
-      callout(); stage.dirty = true;
+      picked(); stage.dirty = true;
     }
     if (key !== curvesKey) { curvesKey = key; stage.curves = await (await fetch("/api/equity" + q)).json(); stage.dirty = true; }
     firstLoad = false;
@@ -853,15 +804,17 @@ async function refresh() {
       show((best || d.attempts[0]).id);
     }
     $("live").classList.remove("off");
-    $("stamp").textContent = "live · updated " + new Date().toLocaleTimeString();
+    $("stamp").textContent = "Live · updated " + new Date().toLocaleTimeString();
   } catch (e) {
     console.error(e);
     $("live").classList.add("off");
-    $("stamp").textContent = "dashboard server not reachable";
+    $("stamp").textContent = "Dashboard server not reachable";
   }
 }
+$("filter").append(...Object.entries(OUTCOME).map(([value, [label]]) => h("option", {value}, label)));
+$("filter").onchange = $("order").onchange = () => { if (last) table(last); };
 $("run").onchange = () => { firstLoad = false; autoPick = true; refresh(); };
-setMode("lineage"); fit(); requestAnimationFrame(frame);
+setMode("space"); fit(); requestAnimationFrame(frame);
 refresh();
 setInterval(refresh, 5000);
 </script>
