@@ -19,7 +19,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v8-pilot"
+PROMPT_VERSION = "v9-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -98,7 +98,10 @@ Rules:
   ewm() and shift(n) with n >= 1. Never use shift(-n), centered windows, bfill, or any
   statistic taken over the whole DataFrame (a plain .mean(), .std(), .max(), .min(),
   .quantile() or .rank() on a full column). Code that uses later rows is detected and rejected.
-  rolling(), expanding() and ewm() already stop at the current row, so do not add shift(1) to them.
+  rolling(), expanding() and ewm() already stop at the current row, so do not add shift(1) to them, with one
+  exception: a breakout compares the close with the high or low of the PREVIOUS N bars, which is
+  df['high'].rolling(N).max().shift(1). Without shift(1) the window includes the current bar, and
+  the close can never be above a maximum that contains its own high.
 - For a rule with separate entry and exit conditions, build a Series that is 1.0 where the entry
   condition is true, 0.0 where the exit condition is true and NaN elsewhere (numpy.where on the
   boolean conditions), then .ffill().fillna(0). Index with boolean masks, never with 0/1 integers.

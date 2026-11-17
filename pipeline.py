@@ -47,7 +47,10 @@ def judge(code, frames, packed):
         # Not a quiet strategy: a strategy that never moves is nearly always a coding bug, so the coder gets it back.
         return {"status": "no_trades", "lookahead": row["lookahead"],
                 "error": "the strategy never changed position on any symbol: every bar had the same position. "
-                         "The entry condition is never applied; check how the conditions are turned into positions."}
+                         "The entry condition is never true, or never reaches the positions. The usual cause is a breakout "
+                         "compared with a rolling maximum that includes the current bar (close > high.rolling(N).max() can never "
+                         "be true): take the previous N bars with .rolling(N).max().shift(1). Otherwise check that the "
+                         "conditions are turned into positions."}
     row["equity"] = backtest.equity_curve(closes, positions)[::24].tolist()  # one point a day, for the dashboard
     row["pos_hash"] = hashlib.sha1((np.round(np.concatenate(positions), 6) + 0.0).tobytes()).hexdigest()
     row["status"] = "too_few_trades" if row["trades_per_symbol"] < MIN_TRADES else "ok"

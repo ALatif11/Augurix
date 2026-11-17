@@ -103,6 +103,15 @@ def strategy(df, also_seen=[]):
     assert row["status"] == "lookahead" and row.get("timing_sharpe") is None
 
 
+def test_a_breakout_on_a_window_that_includes_its_own_bar_is_sent_back_with_the_fix(frames, packed):
+    # 62% of pilot5-7's never-traded attempts were this: the close can never exceed a maximum containing its own high
+    never = "def strategy(df):\n    return (df.close > df.close.rolling(48).max()).astype(float)\n"
+    row = pipeline.attempt(never, frames, packed, run_id="t", pilot=True)
+    assert row["status"] == "no_trades" and ".shift(1)" in row["error"]
+    fixed = never.replace(".max()", ".max().shift(1)")
+    assert pipeline.attempt(fixed, frames, packed, run_id="t", pilot=True)["status"] in ("ok", "too_few_trades")
+
+
 def test_static_reject_never_reaches_docker(frames, packed, monkeypatch):
     monkeypatch.setattr(sandbox, "run", lambda *a, **k: pytest.fail("ran rejected code"))
     row = pipeline.attempt("import os\ndef strategy(df):\n    return df.close\n", frames, packed, run_id="t", pilot=True)
