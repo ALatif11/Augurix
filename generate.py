@@ -27,7 +27,8 @@ import sandbox
 import store
 
 MAX_TRIES = 3
-MAX_FAILURES = 10  # infrastructure failures in a row before an unattended run gives up
+MAX_FAILURES = 10  # infrastructure failures (or skipped turns) in a row before an unattended run gives up
+REST = 10  # ideas the other style gets after a style's turn was skipped, before the stuck style is asked again
 FIXABLE = {"static_reject", "crash", "bad_output", "timeout", "lookahead", "no_trades"}
 BACKTESTED = ("ok", "too_few_trades", "duplicate")
 
@@ -45,11 +46,20 @@ class State(TypedDict, total=False):
 
 
 def build(frames, packed, llm=agents.chat, style="long"):
+    resting = {}  # style -> idea count when its last turn was skipped. gen-v1 stopped at 291 attempts because a skipped
+                  # long-hold turn handed the next turn to long holds again, while day trades still had ideas to give.
+
     def propose(s):
         kind = agents.style_for(s["run_id"], style)
-        h = agents.propose(s["run_id"], llm, style)
+        other = {"long": "day", "day": "long"}.get(kind)
+        ideas = store.count("run_id = ? AND tries = 0", [s["run_id"]])
+        if style == "both" and ideas - resting.get(kind, -REST) < REST and other not in resting:
+            kind = other  # let the stuck style rest for REST ideas while the other style works
+        h = agents.propose(s["run_id"], llm, style, kind=kind)
         if h is None:  # every proposal this turn was turned away: end the turn with nothing run or logged
+            resting[kind] = ideas
             return {"hypothesis": None}
+        resting.pop(kind, None)
         return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind}
 
     def write_code(s):

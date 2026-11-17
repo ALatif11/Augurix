@@ -65,9 +65,30 @@ def test_persistent_failure_stops_the_run_instead_of_spinning(loop):
 
 def test_a_skipped_turn_logs_nothing_and_endless_skipping_stops_the_run(loop, monkeypatch):
     turns = []
-    monkeypatch.setattr(agents, "propose", lambda run_id, llm, style="long": turns.append(1))  # every proposal turned away
+    monkeypatch.setattr(agents, "propose", lambda run_id, llm, style="long", kind=None: turns.append(1))  # every proposal turned away
     loop(BUILD({}, b"", llm=None), "--n", "5")
     assert store.count() == 0 and len(turns) == generate.MAX_FAILURES  # nothing logged, and it stopped instead of spinning
+
+
+def test_a_stuck_style_rests_while_the_other_one_works(loop, monkeypatch):
+    # gen-v1 stopped at 291 attempts: every skipped long-hold turn handed the next turn to long holds again
+    asked = []
+
+    def propose(run_id, llm, style="long", kind=None):
+        asked.append(kind)
+        return None if kind == "long" else agents.Hypothesis(family="trend", hypothesis=f"day trading idea number {len(asked)}")
+
+    def attempt(code, frames, packed, **row):
+        row = {**row, "status": "ok", "timing_sharpe": 0.1, "trades_per_symbol": 50.0, "mean_position": 0.5, "lookahead": "pass"}
+        row["id"] = store.add(row)
+        return row
+
+    monkeypatch.setattr(agents, "propose", propose)
+    monkeypatch.setattr(agents, "write_code", lambda *a, **k: "code")
+    monkeypatch.setattr(generate.pipeline, "attempt", attempt)
+    loop(BUILD({}, b"", llm=None, style="both"), "--n", "25", "--style", "both")
+    assert store.count() == 25  # the run went on: day trades took the turns long holds could not use
+    assert asked[:2] == ["long", "day"] and asked.count("long") >= 2  # long holds rested, then were asked again
 
 
 def test_time_limit_ends_the_run_and_still_writes_a_report(loop, tmp_path):

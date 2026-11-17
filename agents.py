@@ -19,7 +19,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v10"  # frozen for the official run, tag gen-v1
+PROMPT_VERSION = "v11"  # v10 is tag gen-v1 (attempts #2991-#3281 of run gen-v1); v11 continues that run
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -168,9 +168,17 @@ def write_code(hypothesis, llm=chat, previous_code=None, error=None):
     return extract_code(llm("coder", CODER, user, temperature=0.4))
 
 
+FILLER = {"the", "a", "an", "current", "rolling", "of", "is", "are"}
+SAME = {"price": "close", "closes": "close", "average": "mean", "averages": "mean", "highs": "high", "lows": "low"}
+
+
 def _rule(text):
-    """An idea with its numbers and punctuation removed, so re-tunings of one rule compare equal."""
-    return " ".join(re.findall(r"[a-z]+", (text or "").lower()))
+    """An idea with its numbers, punctuation and filler words removed, so re-tunings of one rule compare equal.
+
+    gen-v1's leaders slipped past the near-copy check by writing "the current close" for "the close" (#3040).
+    """
+    text = re.sub(r"\b(current )?hour's\s+", "", (text or "").lower()).replace("close price", "close")
+    return " ".join(SAME.get(w, w) for w in re.findall(r"[a-z]+", text) if w not in FILLER)
 
 
 def _refs(r):
@@ -208,7 +216,7 @@ def _skeleton(text):
     never matches anything.
     """
     entry, _, exit_ = (text or "").lower().partition(" exit ")
-    entry = re.sub(r"^\W*(enter|go long|buy)\w*\s+(when|if)\s+", "", entry.strip())
+    entry = re.sub(r"^\W*(enter|go|buy)(\s+long)?\s+(when|if)\s+", "", entry.strip())
     conditions = {_rule(c) for c in re.split(r"\band\b|,|;", entry)}
     return frozenset(c for c in conditions if len(c.split()) >= 3), _rule(re.sub(r"^(when|if)\s+", "", exit_.strip()).split(".")[0])
 
@@ -231,10 +239,26 @@ def _objection(h, rules, spent, skeletons=()):
                 "Propose something that does not build on an earlier attempt.")
 
 
-def _line(r, spent=()):
+def _line(r, spent=(), closed=lambda text: False):
     result = (f"timing Sharpe {r['timing_sharpe']:.2f}, {r['trades_per_symbol']:.0f} trades"
               if r["timing_sharpe"] is not None else f"{r['status']}: {(r['error'] or '')[:100]}")
-    return f"  #{r['id']}{' (used up)' if r['id'] in spent else ''} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
+    tags = (" (used up)" if r["id"] in spent else "") + (" (closed)" if closed(r["hypothesis"]) else "")
+    return f"  #{r['id']}{tags} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
+
+
+def _closed(run_id, island=None):
+    """A test for whether an idea's rule is closed: MAX_SAME_SKELETON ideas already share its exit and an entry condition.
+
+    Any further variant is turned away (_objection), so the summary marks these rules. In gen-v1 the long-hold
+    researcher kept copying its best rule, which stayed at the top of the summary, until the run stopped.
+    """
+    where, params, _ = scope(run_id, island)
+    known = [_skeleton(r["hypothesis"]) for r in store.query(f"SELECT hypothesis FROM attempts WHERE {where} AND tries = 0", params)]
+
+    def closed(text):
+        entry, exit_ = _skeleton(text)
+        return bool(exit_) and sum(1 for e, x in known if x == exit_ and e & entry) >= MAX_SAME_SKELETON
+    return closed
 
 
 def scope(run_id, island=None):
@@ -274,22 +298,25 @@ def summary(run_id, island=None):
             counts[r[key] or "none"] = counts.get(r[key] or "none", 0) + 1
         return ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
 
-    spent = _spent(rows)
+    spent, closed = _spent(rows), _closed(run_id, island)
     scored = sorted((r for r in rows if r["status"] == "ok"), key=lambda r: -r["timing_sharpe"])
     parts = [f"Attempts so far: {len(rows)}.", f"By family: {tally('family')}.", f"By outcome: {tally('status')}."]
     if scored:
-        parts += ["Best:"] + [_line(r, spent) for r in scored[:5]]
+        parts += ["Best:"] + [_line(r, spent, closed) for r in scored[:5]]
         if scored[5:]:
-            parts += ["Worst:"] + [_line(r, spent) for r in scored[5:][-5:]]
+            parts += ["Worst:"] + [_line(r, spent, closed) for r in scored[5:][-5:]]
 
         def median(lo, hi):
             xs = [r["timing_sharpe"] for r in scored if lo <= r["trades_per_symbol"] < hi]
             return f"{statistics.median(xs):+.2f} over {len(xs)}" if xs else "none yet"
         parts.append(f"Median score by number of trades: under 300: {median(0, 300)}; 300 to 1000: {median(300, 1000)}; "
                      f"over 1000: {median(1000, float('inf'))}.")
-    parts += ["Most recent:"] + [_line(r, spent) for r in rows[-5:]]
+    parts += ["Most recent:"] + [_line(r, spent, closed) for r in rows[-5:]]
     if spent:
         parts.append(f'Attempts marked "used up" belong to a line of ideas already refined {MAX_REFINES} times. Do not build on them.')
+    if any(closed(r["hypothesis"]) for r in scored[:5] + scored[5:][-5:] + rows[-5:]):
+        parts.append('Rules marked "closed" already have as many variants as allowed. Any idea with the same exit and one of the '
+                     "same entry conditions is turned away, whatever its other condition. Propose a different mechanism.")
     if lessons:
         parts += ["Lessons from earlier reviews of this search (oldest first):"] + [l["text"] for l in lessons]
     return "\n".join(parts)
@@ -311,12 +338,13 @@ def _explore(run_id, family, island=None):
                        f"WHERE {where} AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", params + [family])
     ask = f"Propose an idea in the least-tried family: {family}."
     if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
+        closed = _closed(run_id, island)
         ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
-                + "\n".join(_line(r) for r in seen))
+                + "\n".join(_line(r, closed=closed) for r in seen))
     return ask
 
 
-def propose(run_id, llm=chat, style="long"):
+def propose(run_id, llm=chat, style="long", kind=None):
     """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer.
 
     Code turns away a proposal that only re-tunes an earlier rule, extends a used-up line or swaps a filter
@@ -326,7 +354,7 @@ def propose(run_id, llm=chat, style="long"):
     refusals let pilot6 put 56 of its first 113 ideas into one moving-average crossover; accepting after
     five let 168 of pilot7's 330 long-hold ideas through, 116 of them into one rule.)
     """
-    kind = style_for(run_id, style)
+    kind = kind or style_for(run_id, style)  # generate.py passes the other style when this one's last turn was skipped
     island = kind if style == "both" else None
     system = RESEARCHER.replace("{holding}", HOLDING[kind])
     where, params, _ = scope(run_id, island)

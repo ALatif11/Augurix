@@ -180,7 +180,7 @@ def test_one_rule_with_its_filter_swapped_is_turned_away_after_three():
                  "48-hour rolling mean. Exit when the 24-hour rolling mean of volume falls below its 168-hour rolling mean.", None)
     llm, seen = _researcher(fourth, different)
     assert agents.propose("r", llm).hypothesis == different[0]
-    assert "3 earlier ideas already have the same exit" in seen[1] and "maximum price of the previous hour window" in seen[1]
+    assert "3 earlier ideas already have the same exit" in seen[1] and "close above maximum close previous hour window" in seen[1]
 
 
 def test_the_skeleton_check_leaves_unrelated_ideas_alone():
@@ -191,6 +191,23 @@ def test_the_skeleton_check_leaves_unrelated_ideas_alone():
     assert agents._skeleton("buy volume spikes")[1] == ""  # no exit stated, so it can never match anything
     h = agents.Hypothesis(family="trend", hypothesis=BREAKOUT.format(w=720, f="the 24-hour rolling mean of (high - low) is increasing"))
     assert agents._objection(h, agents.Counter(), set(), [a, b, b]) is None  # only one earlier idea shares its exit
+
+
+def test_wording_does_not_hide_a_near_copy_and_full_rules_are_marked_closed():
+    # gen-v1's leaders: #3040 wrote "the current close" where #2996 wrote "the close", and slipped past the check
+    a = agents._skeleton("Enter when the current close exceeds the maximum high of the previous 168-hour period and volume rises. "
+                         "Exit when the close falls below the 168-hour rolling mean of the close.")
+    b = agents._skeleton("Enter long when the close exceeds the maximum high of the previous 168-hour period and the range shrinks. "
+                         "Exit when the current price falls below the 168-hour average of the close.")
+    assert a[1] == b[1] and a[0] & b[0]
+    rule = ("Enter when the close exceeds the maximum high of the previous 168-hour period and {f}. "
+            "Exit when the close falls below the 168-hour mean of the close.")
+    for k, f in enumerate(["volume rises above its mean", "the range is shrinking", "volatility is rising"]):
+        _ok(1.0 - k / 10, 100, rule.format(f=f))
+    _ok(0.2, 100, "Enter when the 24-hour mean of volume crosses above its 168-hour mean. Exit when it falls back below.")
+    text = agents.summary("r")
+    lines = [l for l in text.splitlines() if l.startswith("  #")]
+    assert all(("(closed)" in l) == ("previous 168-hour" in l) for l in lines) and 'Rules marked "closed"' in text
 
 
 def test_in_a_both_run_each_style_is_an_island():
