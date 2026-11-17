@@ -7,8 +7,10 @@ log and nothing else. Prompts must stay free of market hints, dates and "what wo
 import json
 import os
 import re
+import statistics
 import time
 import urllib.request
+from collections import Counter
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -17,14 +19,17 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v3-pilot"
+PROMPT_VERSION = "v4-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
+MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
+              # worse after the first 200, as it kept refining its own refinements.
+MAX_REFINES = 3  # ideas allowed to build on one attempt. night1 built on its top score 81 times.
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
 
 class Hypothesis(BaseModel):
     family: Literal["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
-    hypothesis: str = Field(min_length=20)
+    hypothesis: str = Field(min_length=20, max_length=450)  # the server's grammar enforces this, cutting a longer idea off
     parent_id: int | None = None
 
 
@@ -79,8 +84,10 @@ Rules:
 - Import only numpy, pandas and math. No file access.
 - No calendar years or dates anywhere, including comments. Hour of day and day of week
   taken from df.ts are fine.
-- Vectorised pandas and numpy only. It must finish in a few seconds on 35,000 rows.
-  The environment has pandas 2.2 and numpy 1.26.
+- Vectorised pandas and numpy only. It must finish in a few seconds on 35,000 rows and is cut
+  off after 20. Never call .apply() with a Python function on a rolling window or a column, and
+  never loop over rows: use the built-in rolling methods (mean, std, sum, min, max, quantile,
+  corr, skew, kurt). The environment has pandas 2.2 and numpy 1.26.
 - Deterministic: no randomness.
 - Every position change costs 0.1%, and a strategy that barely trades is discarded.
 
@@ -99,9 +106,17 @@ Ideas are scored by timing Sharpe: the Sharpe ratio after 0.1% trading costs, mi
 holding a constant position of the same average size would have earned. Simply being long
 scores nothing; only being in the market at better times than average scores.
 
+Every position change costs 0.1%, so an idea that changes position more than a few hundred times
+over the history needs a large edge on each trade. Prefer rules that hold a position for many hours.
+
 You will be shown what has been tried so far. Propose ONE new idea, stated precisely enough to
 implement: the indicators, the window lengths in hours, and the entry and exit rules. Do not
 mention specific dates, events or price levels.
+
+Keep it simple: at most two indicators, at most two entry conditions and one exit condition, in
+under 60 words. Describe each indicator by how it is computed ("the 24-hour rolling mean of
+volume"), never by an invented name. Adding one more filter to an idea that already has two is
+not a new idea.
 
 Reply with JSON only:
 {"family": one of """ + json.dumps(FAMILIES) + """, "hypothesis": "<the idea>", "parent_id": <id of the attempt you are refining, or null>}"""
@@ -131,14 +146,21 @@ def _line(r):
     return f"  #{r['id']} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
 
 
+def _round(run_id):
+    """The attempts of the current round of MEMORY attempts, and the reviewer's lessons written during it."""
+    rows = store.query("SELECT id, tries, parent_id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol "
+                       "FROM attempts WHERE run_id = ? ORDER BY id", [run_id])
+    rows = rows[len(rows) // MEMORY * MEMORY:]
+    return rows, [l for l in store.lessons(run_id, 2) if rows and l["after_attempt"] >= rows[0]["id"]]
+
+
 def summary(run_id):
-    """What the researcher is shown: counts, best, worst and latest attempts, and the reviewer's lessons.
+    """What the researcher is shown about the current round: counts, best, worst and latest attempts, and lessons.
 
     The numbers are assembled by code. Only the lessons are model-written, and they
     were written from these same discovery-period numbers.
     """
-    rows = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol "
-                       "FROM attempts WHERE run_id = ? ORDER BY id", [run_id])
+    rows, lessons = _round(run_id)
     if not rows:
         return "Nothing has been tried yet."
 
@@ -154,8 +176,13 @@ def summary(run_id):
         parts += ["Best:"] + [_line(r) for r in scored[:5]]
         if scored[5:]:
             parts += ["Worst:"] + [_line(r) for r in scored[5:][-5:]]
+
+        def median(lo, hi):
+            xs = [r["timing_sharpe"] for r in scored if lo <= r["trades_per_symbol"] < hi]
+            return f"{statistics.median(xs):+.2f} over {len(xs)}" if xs else "none yet"
+        parts.append(f"Median score by number of trades: under 300: {median(0, 300)}; 300 to 1000: {median(300, 1000)}; "
+                     f"over 1000: {median(1000, float('inf'))}.")
     parts += ["Most recent:"] + [_line(r) for r in rows[-5:]]
-    lessons = store.lessons(run_id, 2)
     if lessons:
         parts += ["Lessons from earlier reviews of this search (oldest first):"] + [l["text"] for l in lessons]
     return "\n".join(parts)
@@ -176,11 +203,18 @@ def propose(run_id, llm=chat):
         if seen:
             ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
                     + "\n".join(f"  - {s['hypothesis'][:140]}" for s in seen))
-    elif turn % 4 == 1 or not store.lessons(run_id, 1):
-        ask = ("Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it. "
-               "Do not pick an attempt that the recent list shows has already been refined several times.")
     else:
-        ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
+        rows, lessons = _round(run_id)
+        if turn % 4 == 1 or not lessons:
+            ask = "Refine or vary one of the better attempts, or take a failed idea and fix what was wrong with it."
+        else:
+            ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
+        built_on = Counter(i for r in rows if r["tries"] == 0
+                           for i in {int(x) for x in re.findall(r"#(\d+)", r["hypothesis"] or "")} | {r["parent_id"]})
+        spent = sorted(i for i, n in built_on.items() if i and n >= MAX_REFINES)
+        if spent:
+            ask += (f" These attempts have each been built on {MAX_REFINES} or more times already. Do not use them again: "
+                    + ", ".join(f"#{i}" for i in spent) + ".")
     user = summary(run_id) + "\n\n" + ask
     for last in (False, True):
         text = llm("researcher", RESEARCHER, user, schema=Hypothesis.model_json_schema())
@@ -210,7 +244,9 @@ Write three short lists, at most 5 items each, one sentence per item, referring 
 - worked: what the ideas scoring clearly above +0.5 have in common. If none did, say so.
 - failed: what scored clearly below zero, was rejected or crashed, and the likely reason. Use the
   error text. Note when heavy trading (many trades) is what sank an idea.
-- next_steps: specific directions not yet tried, or a concrete fix for a promising failure.
+- next_steps: specific directions not yet tried, or a concrete fix for a promising failure. Never
+  repeat a next step you gave before, and never suggest adding another filter to an idea that
+  later attempts already refined without improving it. Simpler ideas are preferred.
 
 Do not mention dates, events or price levels.
 Reply with JSON only: {"worked": [...], "failed": [...], "next_steps": [...]}"""
@@ -223,7 +259,8 @@ def review(run_id, after_id, llm=chat):
     earlier = store.lessons(run_id, 1)
     user = "Results in this batch:\n" + "\n".join(_line(r) for r in rows)
     if earlier:
-        user += "\n\nLessons recorded before this batch (keep what still holds, correct what does not):\n" + earlier[0]["text"]
+        user += ("\n\nNext steps you gave after the previous batch. Do not repeat any of them; if this batch shows one "
+                 "was tried, say in worked or failed what came of it:\n" + earlier[0]["text"].split("Next:", 1)[-1].strip())
     for last in (False, True):
         text = llm("reviewer", REVIEWER, user, schema=Review.model_json_schema(), temperature=0.3)
         try:

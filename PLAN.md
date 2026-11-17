@@ -31,7 +31,20 @@ Verified: the sandbox gives the same result as the host for the trend baseline (
 **Pilot runs so far (2026-11-16), none of which count toward `N` or may be validated:**
 
 - `pilot`: the 20 hand-written ideas. The first pass stalled at idea 8 when one coder reply ran to 16,000 tokens; replies are now capped at 1,500. Finished on the second pass: 28 attempts, all 20 ideas reached a result. This is Week 2's "done".
-- `night1`: the first unattended researcher run, started 07:25 EST for 4.5 hours with prompts `v2-pilot`. Its report is `runs/night1_report.md`. Read it to decide what to fix in the prompts before the official run.
+- `night1`: the first unattended researcher run, 07:25 to 11:54 EST, 42 attempts under `v2-pilot` and 727 under `v3-pilot`. Report: `runs/night1_report.md`. 769 attempts on 487 ideas, 400 backtested, no infrastructure failures, 171 attempts an hour.
+  - **Result: nothing distinguishable from luck.** Best discovery timing Sharpe +1.45; the best of 400 no-skill strategies over four years is expected to reach about +1.49. 39 of 400 beat the hand-written 20-day trend baseline (0.69) in-sample. The top one (#410) is in the market 0.7% of the time on 43 trades, and its code does not compute what its description says.
+  - **The search got worse as it ran.** Attempts 1–200: 35 scores above +0.5, median about 0. Attempts 400–769: 6 above +0.5, median about −2. `no_trades` rose from 9% to about 25–36% of attempts.
+  - **Why:** the researcher stacks jargon. 407 of 487 ideas contain "Volume-Weighted", 195 start with "Refine", median idea length is 700 characters, and entries end up as four conditions ANDed together that never fire. The reviewer's notes repeat themselves: "refine the breakout combinations from #410" appears in 15 consecutive reviews. Breakout got 293 of 769 attempts because every non-explore turn went there.
+  - **Fees decide most scores.** 190 of 400 backtested strategies made over 1,000 trades per symbol; their median is −2.7. Under 1,000 trades the median is about 0.
+  - **Timeouts:** all 40 used `rolling().apply()` with a Python function. At 60 seconds each they cost about 40 minutes of the run.
+  - **Fixes made the same day as prompts `v4-pilot`** (`agents.py`, `pipeline.py`; each has a test):
+    - Ideas are capped at 450 characters by the JSON schema, which llama.cpp's grammar enforces by cutting the string off. The researcher prompt asks for at most two indicators, two entry conditions and one exit, under 60 words, described by how they are computed and not by an invented name.
+    - The researcher prompt states the fee arithmetic, and the summary it reads now has a code-computed line: median score for under 300, 300 to 1,000 and over 1,000 trades.
+    - The coder prompt bans `.apply()` with a Python function and row loops. Discovery timeout is 20 seconds (`pipeline.TIMEOUT`), and a timeout goes back to the coder with that hint. `sandbox.run` keeps its 60-second default, which validation uses on 1.5 times the bars. Cost: 20 of night1's 400 backtested strategies took over 20 seconds and would now be sent back.
+    - The reviewer sees only its previous "Next" list, with an instruction not to repeat it. Before, it was given all its earlier notes and copied them forward.
+    - An attempt that three ideas have already built on (`agents.MAX_REFINES`, counted from `parent_id` and from `#id` mentions) is named to the researcher as used up.
+    - Memory resets every 200 attempts (`agents.MEMORY`): the summary and lessons cover only the current round. Family counts and the duplicate check still cover the whole run. This is one run id, so an official run still has one `N`.
+  - The report's "luck" line was wrong on the first write (+8.75): it used the spread of the scores, which is mostly fee losses. `generate.py` now uses the sampling variance of an annual Sharpe, `1 / years`. The same caution applies to Option A below, whose bar comes from the variance across validated candidates.
 
 Prompt history: `v0` produced comment monologues of 1,200 tokens on average. `v1` ("no comments") was ignored, because with thinking off the model reasons in comments. `v2` gives it a short PLAN section before the code block, and most replies are now 17 to 26 lines with no comments. `v3` changes only the researcher's turn order. In the first ten minutes of `night1` (42 attempts under `v2`, log in `runs/night1_part1.log`), one turn in three explored and 21 of 30 ideas were variations of the single best trend strategy. Under `v3` every other turn explores the least-tried or second least-tried family. `night1` was restarted at 07:37 EST with `v3`, so it mixes both; the `prompt_version` column says which attempt used which.
 
@@ -51,10 +64,10 @@ wsl -d Ubuntu-24.04 -- bash -lc "~/llama.cpp/build/bin/llama-server -m ~/models/
 
 Next, in order:
 
-1. Start Docker Desktop and the model server (command above).
-2. `python generate.py --ideas ideas.txt` and watch the dashboard. This is Week 2's "done" test. Fix prompts until most attempts produce code that runs.
-3. Adam reads `backtest.py`, `lookahead.py` and `dsr.py` against their specs until he can explain them.
-4. Week 5 scripts are written and tested on synthetic data only (106 tests passing in total). They have never touched the real validation bars and must not until the official run is frozen. See "Week 5" for the exact sequence.
+1. `pilot4` (prompts `v4-pilot`) was stopped by Adam at 139 of 250 attempts on 2026-11-16. Resume with `python generate.py --run pilot4 --n 250`; it continues from attempt 140 and writes `runs/pilot4_report.md` when it ends. Seen at 50 attempts, against the same stretch of `night1`: 304 attempts an hour (214), 0 crashes (6), 0 timeouts, median idea 220 characters (494). Still wrong: 18 of 38 backtested strategies made over 1,000 trades, so the fee line has not changed what gets proposed; refine turns have become parameter sweeps (#849, #851, #853 are one breakout rule with volume multipliers 1.3, 1.5, 1.4), which the three-per-parent cap does not stop because each refines the one before; the reviewer still repeated one of its next steps. The memory reset at 200 attempts has not been exercised yet. Fix the sweeps and the overtrading before freezing.
+2. Adam reads `backtest.py`, `lookahead.py` and `dsr.py` against their specs until he can explain them.
+3. Adam confirms Option A or B, then the prompts are frozen and tagged `gen-v1` for the official run.
+4. Week 5 scripts are written and tested on synthetic data only (114 tests passing in total). They have never touched the real validation bars and must not until the official run is frozen. See "Week 5" for the exact sequence.
 
 Baselines on discovery (2019–2022, BTC and ETH equal weight, 10 bp fee). In-sample numbers from a period everyone knows; not evidence of anything except that the judge behaves sensibly.
 
@@ -368,6 +381,7 @@ Langfuse, results page, critic agent, vectorbt cross-check, bake-off down to one
 - **Langfuse** self-hosted now needs Postgres, ClickHouse, Redis and object storage. The `llm_calls` table gives tracing from day one. Add Langfuse in Week 4 only if the loop already works, with a two-hour limit.
 - **Docker Desktop on WSL2** reads Windows-mounted folders slowly. The files here are small enough not to matter; if sandbox start-up dominates the run time, move the data into a Docker volume.
 - **Hypothesis (the testing library)** was planned for the backtester's properties; seeded random cases do that job, so it is not installed.
+- **Dashboard layout (2026-11-16):** a pipeline strip (one chip per stage, with how many attempts stopped there), a 3D stage with three views, and a telemetry column, all computed in SQL by `dashboard.telemetry`. The default view is idea lineage: sector is family, radius is time, height is timing Sharpe, and a strand joins an idea to the attempt it built on (`parent_id` plus `#id` mentions). On `night1` it shows 83 strands into #410. The "luck" line on the histogram and the family chart is `dsr.expected_max_sharpe(1 / years, backtested count)`, the same rule as the run report. A forecast chart of live candles, as in the screenshots Adam sent, is deliberately absent: current prices are holdout data.
 - **Dashboard:** `python dashboard.py`, then http://127.0.0.1:8000. Standard-library HTTP server and one HTML file, no build step, polls every 5 seconds. It shows discovery results only, labels them in-sample, and keeps validation, holdout and the forward test locked. It must never fetch current prices before the holdout is opened: those are holdout data. Move to FastAPI and React only if it needs more than three read-only routes.
 - **No OpenAI client library and no Pydantic-only dependency:** the LLM call is one `urllib` POST; Pydantic arrives with LangGraph and validates the researcher's JSON.
 

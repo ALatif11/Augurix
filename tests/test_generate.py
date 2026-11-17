@@ -52,7 +52,7 @@ def test_failures_are_survived_and_reviews_happen_on_schedule(loop, tmp_path):
     report = (tmp_path / "t_report.md").read_text(encoding="utf-8")
     assert "5 attempts" in report and "in-sample" in report and "pilot" in report.lower()
     assert "| 5 | trend | +1.50 |" in report and "What the reviewer agent recorded" in report
-    assert "by luck alone" in report
+    assert "about +0.60 by luck alone" in report  # best of 5 no-skill annual Sharpes over 4 years: sd 0.5 times 1.19
 
 
 def test_persistent_failure_stops_the_run_instead_of_spinning(loop):

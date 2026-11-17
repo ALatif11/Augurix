@@ -130,9 +130,12 @@ def write_report(run_id):
     statuses = sorted({r["status"] for r in rows}, key=lambda s: -count(lambda r: r["status"] == s))
     out += [f"| {s} | {count(lambda r: r['status'] == s)} |" for s in statuses]
     if len(scores) > 1:
-        luck = dsr.expected_max_sharpe(statistics.variance(scores), len(scores))
+        # An annual Sharpe measured over Y years has sampling variance of about 1/Y. The spread of the
+        # scores themselves is the wrong input here: it is mostly fee losses from overtrading, not noise
+        # (night1: variance 8.6, which put the "luck" bar at an absurd +8.75).
+        luck = dsr.expected_max_sharpe(1 / pipeline.DISCOVERY_YEARS, len(scores))
         out += ["", "## Best by discovery timing Sharpe", "",
-                f"Median score {statistics.median(scores):+.2f}. The best of {len(scores)} scores spread this widely is expected to "
+                f"Median score {statistics.median(scores):+.2f}. The best of {len(scores)} strategies with no skill at all is expected to "
                 f"reach about {luck:+.2f} by luck alone, so a top score near that number means nothing.", "",
                 "| # | Family | Timing Sharpe | Trades | In market | Idea |", "|---|---|---|---|---|---|"]
         out += [f"| {r['id']} | {r['family'] or '-'} | {r['timing_sharpe']:+.2f} | {r['trades_per_symbol']:.0f} | {r['mean_position']:.0%} | {idea(r)} |"

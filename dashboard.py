@@ -9,6 +9,7 @@ import functools
 import json
 import math
 import os
+from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -17,12 +18,15 @@ import duckdb
 import numpy as np
 
 import backtest
+import dsr
 import pipeline
 import store
 
 ROOT = Path(__file__).parent
-LIST_COLS = ("id, created_at, run_id, pilot, tries, family, hypothesis, status, lookahead, "
-             "timing_sharpe, net_sharpe, trades_per_symbol, mean_position")
+LIST_COLS = ("id, created_at, run_id, pilot, tries, parent_id, family, left(hypothesis, 300) AS hypothesis, status, lookahead, "
+             "timing_sharpe, net_sharpe, trades_per_symbol, mean_position, "
+             # the earlier attempts an idea says it builds on, for the lineage view
+             "CAST(regexp_extract_all(hypothesis, '#([0-9]{1,9})', 1) AS BIGINT[]) AS refs")
 BACKTESTED = "status IN ('ok', 'too_few_trades', 'duplicate')"
 
 
@@ -56,12 +60,43 @@ def state(run=None):
         "funnel": funnel[0] if funnel else None,
         "scores": [r["timing_sharpe"] for r in store.query(
             f"SELECT timing_sharpe FROM attempts WHERE {where} AND {BACKTESTED}", params)],
-        "attempts": store.query(f"SELECT {LIST_COLS} FROM attempts WHERE {where} ORDER BY id DESC LIMIT 300", params),
+        "attempts": store.query(f"SELECT {LIST_COLS} FROM attempts WHERE {where} ORDER BY id DESC LIMIT 1000", params),
+        "tele": telemetry(where, params),
         "locks": {"detector": (ROOT / "lookahead.py").exists(),
                   "holdout_opened": (ROOT / "results" / "HOLDOUT_OPENED.json").exists()},
         "week5": week5(run),
         "lessons": lessons(run),
     })
+
+
+def telemetry(where, params):
+    """Run-level aggregates for the side panels. Every number is computed here from the log; none is model-written."""
+    span = store.query(f"""
+        SELECT min(created_at) AS first, max(created_at) AS last, count(*) FILTER (tries = 0) AS ideas,
+               count(*) FILTER ({BACKTESTED} AND NOT pilot) AS counted, count(*) FILTER (status = 'ok') AS scored,
+               count(*) FILTER (status = 'ok' AND trades_per_symbol > 1000) AS heavy,
+               median(timing_sharpe) FILTER (status = 'ok') AS median, max(model) AS model, max(prompt_version) AS prompts
+        FROM attempts WHERE {where}""", params)
+    if not span or span[0]["first"] is None:
+        return None
+    span = span[0]
+    window = [span["first"] - timedelta(minutes=10), span["last"]]  # the first model call precedes the first attempt
+    return {
+        "span": span,
+        # what the best of this many no-skill strategies is expected to score (same rule as the run report)
+        "luck": dsr.expected_max_sharpe(1 / pipeline.DISCOVERY_YEARS, span["scored"]),
+        "statuses": store.query(f"SELECT status, count(*) AS n FROM attempts WHERE {where} GROUP BY status ORDER BY n DESC", params),
+        "families": store.query(f"""
+            SELECT coalesce(family, 'none') AS family, count(*) AS n, count(*) FILTER (status = 'ok') AS scored,
+                   median(timing_sharpe) FILTER (status = 'ok') AS median, max(timing_sharpe) FILTER (status = 'ok') AS best
+            FROM attempts WHERE {where} GROUP BY 1 ORDER BY 1""", params),
+        "pace": store.query(f"SELECT time_bucket(INTERVAL 5 MINUTE, created_at) AS t, count(*) AS n FROM attempts "
+                            f"WHERE {where} GROUP BY 1 ORDER BY 1", params),
+        "llm": store.query("SELECT role, count(*) AS calls, sum(seconds) AS seconds, sum(tokens_out) AS tokens FROM llm_calls "
+                           "WHERE created_at BETWEEN ? AND ? GROUP BY role ORDER BY seconds DESC", window),
+        "flow": store.query("SELECT time_bucket(INTERVAL 1 MINUTE, created_at) AS t, sum(tokens_out) AS n FROM llm_calls "
+                            "WHERE created_at BETWEEN ? AND ? GROUP BY 1 ORDER BY 1", window),
+    }
 
 
 def lessons(run=None):

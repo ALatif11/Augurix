@@ -15,6 +15,9 @@ import static_check
 import store
 
 MIN_TRADES = 30  # position changes per symbol over the discovery period
+DISCOVERY_YEARS = 4  # 2019-01-01 to 2022-12-31 (make_splits.py)
+TIMEOUT = 20  # seconds on discovery. Validation runs the same code on 1.5 times the bars under sandbox.py's
+              # 60s default, so anything that passes here has room there. An honest strategy takes about 1s.
 
 
 def load_discovery():
@@ -30,9 +33,11 @@ def judge(code, frames, packed):
     reason = static_check.check(code)
     if reason:
         return {"status": "static_reject", "error": reason}
-    out = sandbox.run(code, packed)
+    out = sandbox.run(code, packed, timeout=TIMEOUT)
     if "error" in out:
-        return {"status": out["error"], "error": out["detail"]}
+        hint = (" rolling().apply() with a Python function or a loop over rows is the usual cause; use the built-in "
+                "rolling methods instead.") if out["error"] == "timeout" else ""
+        return {"status": out["error"], "error": out["detail"] + hint}
     symbols = sorted(frames)
     closes = [frames[s].close.to_numpy() for s in symbols]
     positions = [backtest.clean_positions(np.array(out["positions"][s], dtype=float)) for s in symbols]
