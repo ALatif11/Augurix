@@ -149,8 +149,9 @@ details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 .stage .fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
 .readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px 12px; margin: 10px 0 0; font-size: 12px; color: var(--ink2); }
 .readout b { display: block; color: var(--ink); font-size: 15px; font-weight: 500; transition: background-color .6s; border-radius: 4px; }
-.readout b.flash-buy { background: color-mix(in srgb, var(--hue) 22%, transparent); transition: none; }
-.readout b.flash-sell { background: color-mix(in srgb, var(--sell) 22%, transparent); transition: none; }
+#both-usd { transition: background-color .6s; border-radius: 4px; }
+.flash-buy { background: color-mix(in srgb, var(--hue) 22%, transparent); transition: none !important; }
+.flash-sell { background: color-mix(in srgb, var(--sell) 22%, transparent); transition: none !important; }
 .tradelog { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12.5px; color: var(--ink2); min-height: 22px; }
 .tradelog li { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--rule); }
 .tradelog li b { min-width: 32px; color: var(--ink); font-weight: 600; }
@@ -853,7 +854,7 @@ async function show(id) {
     for (const [k, v] of [["$1,000 on both coins", a.total_return == null ? "–" : "$" + Math.round(1000 * (1 + a.total_return)).toLocaleString()],
                           ["Net Sharpe", signed(a.net_sharpe)], ["Max drawdown", pct(a.max_drawdown)],
                           ["Trades per symbol", fmt(a.trades_per_symbol, 0)], ["Time in market", pct(a.mean_position)], ["Typical holding", held(row.hold_hours)]])
-      dl.append(h("div", {}, h("dt", {}, k), h("dd", {}, v)));
+      dl.append(h("div", {}, h("dt", {}, k), h("dd", k.startsWith("$") ? {id: "both-usd", title: "Moves with the replay: starts at $1,000 and follows both coins together, as the judge scores them"} : {}, v)));
     kids.push(dl);
   }
   if (BYID.has(id)) kids.push(lineage(row));
@@ -892,11 +893,15 @@ const replay = (() => {
 
   function build() {
     if (chart) { chart.remove(); chart = null; }
-    const b = BARS[sym], n = b.t.length, p = new Float32Array(n);
-    let k = 0, cur = 0;
-    for (let t = 0; t < n; t++) { if (k < data[sym].length && data[sym][k][0] === t) cur = data[sym][k++][1]; p[t] = cur; }
+    const path = sy => {  // the position on every bar, from its change points
+      const p = new Float32Array(BARS[sy].t.length);
+      let k = 0, cur = 0;
+      for (let t = 0; t < p.length; t++) { if (k < data[sy].length && data[sy][k][0] === t) cur = data[sy][k++][1]; p[t] = cur; }
+      return p;
+    };
+    const b = BARS[sym], n = b.t.length, p = path(sym);
     const changes = data[sym].map(([t, v], j) => ({t, v, prev: j ? data[sym][j - 1][1] : 0}));
-    live = {b, n, p, changes};
+    live = {b, n, p, changes, all: Object.keys(data).map(sy => ({b: BARS[sy], p: path(sy)}))};
 
     const tabs = h("div", {class: "seg", role: "group", "aria-label": "Symbol"}, ...Object.keys(data).map(sy =>
       on(h("button", {"aria-pressed": sy === sym ? "true" : "false"}, sy.replace("USDT", "")), () => { stop(); sym = sy; build(); })));
@@ -950,15 +955,19 @@ const replay = (() => {
   }
   // The judge's formula for one symbol: the position held earns the next bar's return, minus the fee on each change.
   // Shown as a pretend $1,000 account; `paid` is the fee in dollars, taken from the balance at the time of each change.
-  let paid = 0;
+  // eqP is the judge's portfolio (backtest.portfolio_returns): both coins' net returns averaged each bar, then compounded.
+  let paid = 0, eqP = 1;
   function advance(t) {
     const {b, p} = live, fee = D.fee ?? 0.001, held = p[t - 1], prev = t > 1 ? p[t - 2] : 0, cost = fee * Math.abs(held - prev);
     paid += eqS * cost * START;
     eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - cost;
     if (held !== prev) trades++;
+    let net = 0;
+    for (const s of live.all) { const hs = s.p[t - 1], ps = t > 1 ? s.p[t - 2] : 0; net += hs * (s.b.c[t] / s.b.c[t - 1] - 1) - fee * Math.abs(hs - ps); }
+    eqP *= 1 + net / live.all.length;
   }
   function equityTo(to) {
-    eqS = 1; trades = 0; paid = 0;
+    eqS = 1; eqP = 1; trades = 0; paid = 0;
     for (let t = 1; t <= to; t++) advance(t);
     eqB = live.b.c[to] / live.b.c[0];
   }
@@ -974,6 +983,8 @@ const replay = (() => {
     cells["Buy & hold"].textContent = usd(eqB * START);
     cells["Fees paid"].textContent = usd(paid);
     cells["Trades"].textContent = String(trades);
+    const both = $("both-usd");
+    if (both) both.textContent = usd(eqP * START);
   }
 
   function start() {
@@ -1009,9 +1020,10 @@ const replay = (() => {
     const item = h("li", {}, h("b", {}, buy ? "Buy" : "Sell"), `${day(b.t[c.t])}`, h("span", {}, `position ${pct(c.prev)} → ${pct(c.v)} at ${b.c[c.t].toLocaleString(undefined, {maximumFractionDigits: 2})}`));
     log.prepend(item);
     while (log.children.length > 5) log.lastChild.remove();
-    const cell = cells["Position"];
-    cell.classList.remove("flash-buy", "flash-sell"); void cell.offsetWidth; cell.classList.add(buy ? "flash-buy" : "flash-sell");
-    setTimeout(() => cell.classList.remove("flash-buy", "flash-sell"), 60);
+    for (const cell of [cells["Position"], $("both-usd")].filter(Boolean)) {
+      cell.classList.remove("flash-buy", "flash-sell"); void cell.offsetWidth; cell.classList.add(buy ? "flash-buy" : "flash-sell");
+      setTimeout(() => cell.classList.remove("flash-buy", "flash-sell"), 60);
+    }
     if (calm.matches) return;  // no moving effects for people who asked for less motion
     const x = chart.timeScale().timeToCoordinate(b.t[c.t]), y = candle.priceToCoordinate(b.c[c.t]);
     if (x == null || y == null) return;
