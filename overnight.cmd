@@ -12,7 +12,8 @@ if "%RUN%"=="" set RUN=pilot
 if "%HOURS%"=="" set HOURS=5
 if "%STYLE%"=="" set STYLE=long
 set PYTHONUTF8=1
-start "llama-server" /min wsl -d Ubuntu-24.04 -- bash -lc "exec ~/llama.cpp/build/bin/llama-server -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -c 16384 -np 1 --reasoning-budget 0 --host 127.0.0.1 --port 8080"
+rem /b: no window of its own. pilot9 lost its server after 1.5 hours, most likely by its minimized window being closed.
+start "llama-server" /b wsl -d Ubuntu-24.04 -- bash -lc "exec ~/llama.cpp/build/bin/llama-server -m ~/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -c 16384 -np 1 --reasoning-budget 0 --host 127.0.0.1 --port 8080"
 set /a TRIES=0
 :wait
 curl -sf -m 3 http://127.0.0.1:8080/health >nul 2>&1 && goto ready
