@@ -101,7 +101,7 @@ def test_an_idea_that_only_changes_the_numbers_is_turned_away():
 
     stubborn = ("Enter when the close exceeds the 120-hour high and volume is 2.0 times its 12-hour mean.", None)
     llm, seen = _researcher(*[stubborn] * 5)
-    assert agents.propose("r", llm).hypothesis == stubborn[0] and len(seen) == 5  # after five asks the run moves on
+    assert agents.propose("r", llm) is None and len(seen) == 5  # after five asks the turn is skipped, never accepted
     assert "least-tried family" in seen[3] and "not accepted" not in seen[3]  # the fourth ask explores elsewhere, afresh
 
 

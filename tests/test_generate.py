@@ -8,6 +8,8 @@ import generate
 import sandbox
 import store
 
+BUILD = generate.build  # the real graph; the loop fixture replaces generate.build
+
 
 class FakeGraph:
     """Stands in for the LangGraph pipeline: logs one attempt per call, failing on the calls listed."""
@@ -59,6 +61,13 @@ def test_failures_are_survived_and_reviews_happen_on_schedule(loop, tmp_path):
 def test_persistent_failure_stops_the_run_instead_of_spinning(loop):
     graph = loop(FakeGraph(fail_on=set(range(1, 100))), "--n", "5")
     assert graph.calls == generate.MAX_FAILURES and store.count() == 0
+
+
+def test_a_skipped_turn_logs_nothing_and_endless_skipping_stops_the_run(loop, monkeypatch):
+    turns = []
+    monkeypatch.setattr(agents, "propose", lambda run_id, llm, style="long": turns.append(1))  # every proposal turned away
+    loop(BUILD({}, b"", llm=None), "--n", "5")
+    assert store.count() == 0 and len(turns) == generate.MAX_FAILURES  # nothing logged, and it stopped instead of spinning
 
 
 def test_time_limit_ends_the_run_and_still_writes_a_report(loop, tmp_path):

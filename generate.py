@@ -48,6 +48,8 @@ def build(frames, packed, llm=agents.chat, style="long"):
     def propose(s):
         kind = agents.style_for(s["run_id"], style)
         h = agents.propose(s["run_id"], llm, style)
+        if h is None:  # every proposal this turn was turned away: end the turn with nothing run or logged
+            return {"hypothesis": None}
         return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind}
 
     def write_code(s):
@@ -68,7 +70,7 @@ def build(frames, packed, llm=agents.chat, style="long"):
     g.add_node("test", test)
     g.add_conditional_edges(START, lambda s: "write_code" if s.get("hypothesis") else "propose",
                             ["write_code", "propose"])
-    g.add_edge("propose", "write_code")
+    g.add_conditional_edges("propose", lambda s: "write_code" if s.get("hypothesis") else END, ["write_code", END])
     g.add_edge("write_code", "test")
     g.add_conditional_edges(
         "test", lambda s: "write_code" if s["row"]["status"] in FIXABLE and s["tries"] < MAX_TRIES else END,
@@ -213,7 +215,7 @@ def main(argv=None):
     keep_awake()
     frames = pipeline.load_discovery()
     graph = build(frames, sandbox.pack(frames), style=args.style)
-    failures = 0
+    failures = skipped = 0
     while not (deadline and time.time() >= deadline):
         start = {"run_id": args.run, "pilot": not args.official, "tries": 0}
         if ideas:
@@ -236,6 +238,14 @@ def main(argv=None):
             time.sleep(min(30 * failures, 300))
             continue
         failures = 0
+        if "row" not in out:
+            skipped += 1
+            print(f"- turn skipped: five proposals in a row were turned away ({skipped} in a row)", flush=True)
+            if skipped >= MAX_FAILURES:  # the model is stuck on one rule; more asks would only burn the night
+                print(f"stopping: {MAX_FAILURES} skipped turns in a row", flush=True)
+                break
+            continue
+        skipped = 0
         r = out["row"]
         score = f"{r['timing_sharpe']:+.2f}" if r.get("timing_sharpe") is not None else "  -  "
         print(f"#{r['id']:<5} {r['status']:<15} tries={out['tries']} timing={score}  {out['hypothesis'][:80]}", flush=True)

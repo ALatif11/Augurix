@@ -19,7 +19,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v9-pilot"
+PROMPT_VERSION = "v10-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -321,9 +321,10 @@ def propose(run_id, llm=chat, style="long"):
 
     Code turns away a proposal that only re-tunes an earlier rule, extends a used-up line or swaps a filter
     on a crowded rule, and asks again. After three refusals the turn becomes an exploration of the
-    least-tried family the model has not just proposed in; only if that is refused twice as well is the
-    last valid proposal taken, so a run can never stall. (Accepting after three refusals let pilot6 put
-    56 of its first 113 ideas into one moving-average crossover.)
+    least-tried family the model has not just proposed in. If that is refused twice as well, the turn is
+    skipped and None returned: nothing is run or logged, so it is not a trial. (Accepting after three
+    refusals let pilot6 put 56 of its first 113 ideas into one moving-average crossover; accepting after
+    five let 168 of pilot7's 330 long-hold ideas through, 116 of them into one rule.)
     """
     kind = style_for(run_id, style)
     island = kind if style == "both" else None
@@ -363,7 +364,7 @@ def propose(run_id, llm=chat, style="long"):
             return h
     if h is None:
         raise error
-    return h  # ponytail: after five asks the last valid proposal is taken as it is; it still counts as a trial
+    return None
 
 
 class Review(BaseModel):
