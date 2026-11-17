@@ -145,6 +145,12 @@ def write_report(run_id):
             fs = [r["timing_sharpe"] for r in scored if (r["family"] or "-") == fam]
             out.append(f"| {fam} | {count(lambda r: (r['family'] or '-') == fam)} | {len(fs)} | "
                        + (f"{statistics.median(fs):+.2f} | {max(fs):+.2f} |" if fs else "- | - |"))
+        heavy = [r["timing_sharpe"] for r in scored if r["trades_per_symbol"] > 1000]
+        light = [r["timing_sharpe"] for r in scored if r["trades_per_symbol"] <= 1000]
+        out += ["", "## Trading fees", "",
+                f"{len(heavy)} of {len(scored)} backtested strategies made over 1,000 trades per symbol"
+                + (f". Their median score is {statistics.median(heavy):+.2f}" if heavy else "")
+                + (f", against {statistics.median(light):+.2f} for the rest." if heavy and light else ".")]
     failed = [r for r in rows if r["error"]]
     if failed:
         reasons = {}
@@ -158,12 +164,18 @@ def write_report(run_id):
                 "Written by the model from discovery results only. Read them as its working notes, not as findings."]
         for n in notes:
             out += ["", f"After attempt #{n['after_attempt']}:", "", "```", n["text"], "```"]
+    window = [rows[0]["created_at"] - timedelta(minutes=10), rows[-1]["created_at"]]  # the first call precedes the first attempt
     calls = store.query("SELECT role, count(*) AS n, median(seconds) AS s, median(tokens_out) AS t FROM llm_calls "
-                        "WHERE created_at >= ? AND created_at <= ? GROUP BY role ORDER BY role",
-                        [rows[0]["created_at"] - timedelta(minutes=10), rows[-1]["created_at"]])  # the first call precedes the first attempt
+                        "WHERE created_at >= ? AND created_at <= ? GROUP BY role ORDER BY role", window)
     if calls:
         out += ["", "## Model calls during the run", "", "| Role | Calls | Median seconds | Median tokens out |", "|---|---|---|---|"]
         out += [f"| {c['role']} | {c['n']} | {c['s']:.1f} | {c['t'] or 0:.0f} |" for c in calls]
+        # agents.propose re-asks with the reason in the prompt, so the log of prompts is the record of refusals
+        back = store.query("SELECT count(*) FILTER (prompt LIKE '%not accepted: it is an earlier idea%') AS retuned, "
+                           "count(*) FILTER (prompt LIKE '%not accepted: it builds on%') AS spent FROM llm_calls "
+                           "WHERE role = 'researcher' AND created_at >= ? AND created_at <= ?", window)[0]
+        out += ["", f"Proposals the code sent back to the researcher: {back['retuned']} for only changing the numbers of an earlier "
+                    f"idea, {back['spent']} for building on a line of ideas that was already used up."]
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return path
 
