@@ -112,7 +112,9 @@ Rules:
   off after 20. Never call .apply() with a Python function on a rolling window or a column, and
   never loop over rows: use the built-in rolling methods (mean, std, sum, min, max, quantile,
   corr, skew, kurt). The environment has pandas 2.2 and numpy 1.26.
-- To hold for at most N hours after an entry signal, use entry.astype(float).rolling(N, min_periods=1).max().
+- To hold for N hours after an entry and then exit, mark only the first bar of each entry and spread it:
+  start = cond & ~cond.shift(1, fill_value=False); positions = start.astype(float).rolling(N, min_periods=1).max()
+  where cond is a pandas boolean Series (not a numpy array). Do not use this together with the ffill pattern.
 - Deterministic: no randomness.
 - Every position change costs 0.1%, and a strategy that barely trades is discarded.
 

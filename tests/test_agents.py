@@ -212,3 +212,13 @@ def test_in_a_both_run_each_style_is_an_island():
 
     agents.propose("r", llm, "both")  # three ideas so far: the fourth turn of a both run is a day idea
     assert "closed within 24 hours" in systems[0] and "LONGIDEA" not in users[0] and "DAYIDEA" in users[0]
+
+
+def test_the_hold_for_n_hours_idiom_in_the_coder_prompt_holds_n_hours_from_each_entry():
+    import pandas as pd
+    assert "start = cond & ~cond.shift(1, fill_value=False)" in agents.CODER
+    cond = pd.Series([False, True, True, True, True, True, False, False, True, False, False, False])
+    start = cond & ~cond.shift(1, fill_value=False)
+    positions = start.astype(float).rolling(3, min_periods=1).max()
+    # entries at bars 1 and 8: in for exactly 3 bars after each, even though the first condition lasted 5 bars
+    assert positions.tolist() == [0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0]
