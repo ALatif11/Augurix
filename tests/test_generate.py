@@ -91,7 +91,10 @@ def test_review_text_and_summary(tmp_path, monkeypatch):
     assert store.lessons("other") == []
 
 
-def test_docker_failure_is_not_logged_as_a_strategy_failure(monkeypatch):
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 125, b"", b"failed to connect to the docker API"))
+@pytest.mark.parametrize("code", [125, 3221225794])  # engine down; Windows could not start the docker client (0xC0000142)
+def test_docker_failure_is_not_logged_as_a_strategy_failure(monkeypatch, code):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1, b"", b"Traceback: boom"))
+    assert sandbox.run("def strategy(df):\n    return df.close\n", b"")["error"] == "crash"  # an ordinary failure is still the strategy's
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, code, b"", b"failed to connect to the docker API"))
     with pytest.raises(RuntimeError, match="docker could not start"):
         sandbox.run("def strategy(df):\n    return df.close\n", b"")

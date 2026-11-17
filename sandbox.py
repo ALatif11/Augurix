@@ -47,8 +47,10 @@ def run(code, packed, timeout=60):
             return {"error": "timeout", "detail": f"no result after {timeout + 30}s"}
     if p.returncode == 124:
         return {"error": "timeout", "detail": f"ran longer than {timeout}s"}
-    if p.returncode == 125:
-        # docker itself failed (engine down, image missing). Not the strategy's fault, so it must not be logged as an attempt.
+    # 125: docker itself failed (engine down, image missing). 0xC0000000 and up: Windows could not start the docker
+    # client at all (pilot5's last five attempts, logged while the session was shutting down). Neither is the
+    # strategy's fault, so neither may be logged as an attempt or sent to the coder as a crash.
+    if p.returncode == 125 or p.returncode >= 0xC0000000:
         raise RuntimeError("docker could not start the sandbox: " + p.stderr.decode(errors="replace")[-300:])
     try:
         return json.loads(p.stdout)
