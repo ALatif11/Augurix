@@ -19,12 +19,16 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v5-pilot"
+PROMPT_VERSION = "v6-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
 MAX_REFINES = 3  # refinements allowed in one line of ideas (an idea and everything built on it, directly or through
                  # another refinement). night1 built on its top score 81 times; pilot4 got round a per-attempt cap by chaining.
+MAX_SAME_SKELETON = 3  # ideas allowed to share an exit condition and an entry condition, numbers removed: an idea and
+                       # two variants that swap the other filter. pilot5's top ten were one breakout rule with a
+                       # different second filter each time; a check on the whole wording could not see it, because
+                       # the short plain-language ideas v5 asks for all share one sentence template.
 MAX_SAME_RULE = 2  # ideas allowed to share one wording once the numbers are removed: an idea and one re-tuning of it.
                    # pilot4 proposed one breakout rule with volume multipliers of 1.3, 1.5 and 1.4.
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
@@ -122,7 +126,9 @@ mention specific dates, events or price levels.
 Keep it simple: at most two indicators, at most two entry conditions and one exit condition, in
 under 60 words. Describe each indicator by how it is computed ("the 24-hour rolling mean of
 volume"), never by an invented name. Adding one more filter to an idea that already has two is
-not a new idea, and neither is an earlier idea with different window lengths or thresholds.
+not a new idea, and neither is an earlier idea with different window lengths or thresholds. Keeping
+an earlier idea's exit and one of its entry conditions and swapping only the other condition is
+not a new idea either.
 
 Reply with JSON only:
 {"family": one of """ + json.dumps(FAMILIES) + """, "hypothesis": "<the idea>", "parent_id": <id of the attempt you are refining, or null>}"""
@@ -178,10 +184,31 @@ def _spent(rows):
     return {r["id"] for r in rows if size[find(r["id"])] > MAX_REFINES}
 
 
-def _objection(h, rules, spent):
-    """Why code turns a proposal away before any of it is written or run, or None if it stands."""
+def _skeleton(text):
+    """(entry conditions, exit condition) of an idea, each with numbers and punctuation removed.
+
+    Ideas are written "Enter when A and B. Exit when C." Two ideas with the same C and a shared A or B
+    are one rule with a filter swapped. Text that does not follow the pattern gets an empty exit and
+    never matches anything.
+    """
+    entry, _, exit_ = (text or "").lower().partition(" exit ")
+    entry = re.sub(r"^\W*(enter|go long|buy)\w*\s+(when|if)\s+", "", entry.strip())
+    conditions = {_rule(c) for c in re.split(r"\band\b|,|;", entry)}
+    return frozenset(c for c in conditions if len(c.split()) >= 3), _rule(re.sub(r"^(when|if)\s+", "", exit_.strip()).split(".")[0])
+
+
+def _objection(h, rules, spent, skeletons=()):
+    """Why code turns a proposal away before any of it is written or run, or None if it stands.
+
+    rules: Counter of earlier ideas' wording without numbers. skeletons: earlier ideas' _skeleton values.
+    """
     if rules[_rule(h.hypothesis)] >= MAX_SAME_RULE:
         return "it is an earlier idea with only the numbers changed. Change the mechanism: a different indicator, condition or exit."
+    entry, exit_ = _skeleton(h.hypothesis)
+    shared = [e & entry for e, x in skeletons if exit_ and x == exit_ and e & entry]
+    if len(shared) >= MAX_SAME_SKELETON:
+        return (f"{len(shared)} earlier ideas already have the same exit and the entry condition '{sorted(shared[-1])[0]}', "
+                "with only the other condition swapped. Use a different main entry condition and a different exit.")
     used = sorted(i for i in _refs({"hypothesis": h.hypothesis, "parent_id": h.parent_id}) if i in spent)
     if used:
         return (f"it builds on #{used[0]}, and that line of ideas has already been refined {MAX_REFINES} times. "
@@ -263,8 +290,8 @@ def propose(run_id, llm=chat):
                "condition or exit. Changing only window lengths or thresholds is not accepted.")
     else:
         ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
-    rules = Counter(_rule(r["hypothesis"]) for r in store.query(
-        "SELECT hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run_id]))
+    earlier = [r["hypothesis"] for r in store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run_id])]
+    rules, skeletons = Counter(map(_rule, earlier)), [_skeleton(t) for t in earlier]
     spent, user, h, reason = _spent(rows), summary(run_id) + "\n\n" + ask, None, None
     for _ in range(3):
         text = llm("researcher", RESEARCHER, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
@@ -275,7 +302,7 @@ def propose(run_id, llm=chat):
         except ValidationError as e:
             error, reason = e, "it was not valid JSON in the required form."
             continue
-        reason = _objection(h, rules, spent)
+        reason = _objection(h, rules, spent, skeletons)
         if not reason:
             return h
     if h is None:

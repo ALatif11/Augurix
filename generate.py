@@ -172,10 +172,12 @@ def write_report(run_id):
         out += [f"| {c['role']} | {c['n']} | {c['s']:.1f} | {c['t'] or 0:.0f} |" for c in calls]
         # agents.propose re-asks with the reason in the prompt, so the log of prompts is the record of refusals
         back = store.query("SELECT count(*) FILTER (prompt LIKE '%not accepted: it is an earlier idea%') AS retuned, "
-                           "count(*) FILTER (prompt LIKE '%not accepted: it builds on%') AS spent FROM llm_calls "
+                           "count(*) FILTER (prompt LIKE '%not accepted: it builds on%') AS spent, "
+                           "count(*) FILTER (prompt LIKE '%earlier ideas already have the same exit%') AS swapped FROM llm_calls "
                            "WHERE role = 'researcher' AND created_at >= ? AND created_at <= ?", window)[0]
         out += ["", f"Proposals the code sent back to the researcher: {back['retuned']} for only changing the numbers of an earlier "
-                    f"idea, {back['spent']} for building on a line of ideas that was already used up."]
+                    f"idea, {back['spent']} for building on a line of ideas that was already used up, {back['swapped']} for keeping an earlier "
+                    "rule's exit and entry and swapping only a filter."]
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return path
 

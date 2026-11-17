@@ -134,3 +134,30 @@ def test_hypothesis_length_is_capped():
 
 def test_extract_code_accepts_a_reply_cut_off_before_the_closing_fence():
     assert agents.extract_code("```python\ndef strategy(df):\n    return df.close\n") == "def strategy(df):\n    return df.close\n"
+
+
+BREAKOUT = "Enter when the close price is above the maximum price of the previous {w}-hour window and {f}. Exit when the close price falls below the 168-hour rolling mean."
+
+
+def test_one_rule_with_its_filter_swapped_is_turned_away_after_three():
+    # pilot5's top ten: the same breakout entry and exit, a different second filter each time
+    for w, f in [(672, "the 24-hour rolling standard deviation of close prices is lower than the 336-hour one"),
+                 (720, "the 168-hour rolling mean of close prices is increasing"),
+                 (672, "the 168-hour rolling mean of quote_volume is greater than the 336-hour rolling mean of quote_volume")]:
+        _ok(1.3, 89, BREAKOUT.format(w=w, f=f))
+    fourth = (BREAKOUT.format(w=720, f="the 24-hour rolling mean of (high - low) is increasing"), None)
+    different = ("Enter when the 24-hour rolling mean of volume is above its 168-hour rolling mean and the close is above the "
+                 "48-hour rolling mean. Exit when the 24-hour rolling mean of volume falls below its 168-hour rolling mean.", None)
+    llm, seen = _researcher(fourth, different)
+    assert agents.propose("r", llm).hypothesis == different[0]
+    assert "3 earlier ideas already have the same exit" in seen[1] and "maximum price of the previous hour window" in seen[1]
+
+
+def test_the_skeleton_check_leaves_unrelated_ideas_alone():
+    a = agents._skeleton(BREAKOUT.format(w=672, f="the 168-hour rolling mean of close prices is increasing"))
+    b = agents._skeleton("Enter when the close price is above the maximum price of the previous 336-hour window and volume rises. "
+                         "Exit when the close price falls below the 24-hour rolling minimum.")
+    assert a[0] & b[0] and a[1] != b[1]  # same entry, different exit: a different rule
+    assert agents._skeleton("buy volume spikes")[1] == ""  # no exit stated, so it can never match anything
+    h = agents.Hypothesis(family="trend", hypothesis=BREAKOUT.format(w=720, f="the 24-hour rolling mean of (high - low) is increasing"))
+    assert agents._objection(h, agents.Counter(), set(), [a, b, b]) is None  # only one earlier idea shares its exit
