@@ -19,7 +19,7 @@ def image_ready():
         return False
 
 
-pytestmark = pytest.mark.skipif(not image_ready(), reason="needs Docker and `docker build -t finproj-sandbox .`")
+pytestmark = pytest.mark.skipif(not image_ready(), reason="needs Docker and `docker build -t augurix-sandbox .`")
 
 SMA = """
 import pandas as pd

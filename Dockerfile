@@ -1,4 +1,4 @@
-# Sandbox for generated strategy code.   docker build -t finproj-sandbox .
+# Sandbox for generated strategy code.   docker build -t augurix-sandbox .
 # Library versions are pinned to what the model saw in training (cutoff January 2025):
 # generated code written for pandas 2 / numpy 1 breaks on pandas 3 / numpy 2.
 FROM python:3.12-slim

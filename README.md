@@ -65,7 +65,7 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python download_data.py        (Binance bulk data, 2019-2024, checksums verified)
 .venv\Scripts\python make_splits.py
-docker build -t finproj-sandbox .
+docker build -t augurix-sandbox .
 .venv\Scripts\python -m pytest -q            (134 tests; 12 need Docker running)
 overnight.cmd pilot1 5 both                  (starts the model server, searches for 5 hours, stops it)
 .venv\Scripts\python dashboard.py

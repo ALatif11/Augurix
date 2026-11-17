@@ -14,7 +14,7 @@ from pathlib import Path
 
 import duckdb
 
-DB = Path(os.environ.get("FINPROJ_DB", "runs/attempts.duckdb"))
+DB = Path(os.environ.get("AUGURIX_DB", "runs/attempts.duckdb"))
 
 SCHEMA = """
 CREATE SEQUENCE IF NOT EXISTS attempt_id;

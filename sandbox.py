@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-IMAGE = "finproj-sandbox"
+IMAGE = "augurix-sandbox"
 ROOT = Path(__file__).parent.resolve()
 
 
@@ -32,7 +32,7 @@ def run(code, packed, timeout=60, detector=True):
 
     detector=False skips the look-ahead test, for re-running code that was already judged (the dashboard replay).
     """
-    name = f"finproj-{uuid.uuid4().hex[:12]}"
+    name = f"augurix-{uuid.uuid4().hex[:12]}"
     with tempfile.TemporaryDirectory() as job:
         Path(job, "strategy.py").write_text(code, encoding="utf-8")
         cmd = ["docker", "run", "--rm", "-i", "--name", name, "--network", "none",
