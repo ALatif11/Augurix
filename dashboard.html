@@ -91,10 +91,10 @@ label.inl { color: var(--ink2); font-size: 13px; display: inline-flex; align-ite
 .passing b { color: var(--ink); font-weight: 600; }
 
 .list { display: flex; flex-direction: column; min-width: 0; }
-.list-bar { position: sticky; top: 0; z-index: 2; background: var(--sheet); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px 10px; border-bottom: 1px solid var(--rule); }
+.list-bar { background: var(--sheet); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px 10px; border-bottom: 1px solid var(--rule); }
 .list-bar .count { flex: 1 1 100%; color: var(--ink2); font-size: 12.5px; order: 9; }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-th { position: sticky; top: var(--bar, 0); z-index: 1; background: var(--sheet); text-align: left; font-weight: 500; font-size: 12px; color: var(--ink2); padding: 7px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { position: sticky; top: 0; z-index: 1; background: var(--sheet); text-align: left; font-weight: 500; font-size: 12px; color: var(--ink2); padding: 7px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 td { padding: 8px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; white-space: nowrap; }
 th:first-child, td:first-child { padding-left: 16px; }
 th:last-child, td:last-child { padding-right: 16px; }
@@ -798,7 +798,6 @@ function table() {
     if (m.length > 1 && open.has(m[0].group)) for (const r of m.slice(1)) out.push(line(r, true, m.length, m));
   }
   $("rows").replaceChildren(...(out.length ? out : [h("tr", {}, h("td", {colspan: 6, class: "empty"}, ROWS.length ? "Nothing passes these filters." : "No attempts logged yet."))]));
-  document.documentElement.style.setProperty("--bar", $("list-bar").offsetHeight + "px");
 }
 $("group").onchange = $("order").onchange = $("outcome").onchange = () => table();
 
@@ -851,7 +850,8 @@ async function show(id) {
   kids.push(replayBox);
   if (a.timing_sharpe != null) {
     const dl = h("dl");
-    for (const [k, v] of [["Net Sharpe", signed(a.net_sharpe)], ["Total return", pct(a.total_return)], ["Max drawdown", pct(a.max_drawdown)],
+    for (const [k, v] of [["$1,000 on both coins", a.total_return == null ? "–" : "$" + Math.round(1000 * (1 + a.total_return)).toLocaleString()],
+                          ["Net Sharpe", signed(a.net_sharpe)], ["Max drawdown", pct(a.max_drawdown)],
                           ["Trades per symbol", fmt(a.trades_per_symbol, 0)], ["Time in market", pct(a.mean_position)], ["Typical holding", held(row.hold_hours)]])
       dl.append(h("div", {}, h("dt", {}, k), h("dd", {}, v)));
     kids.push(dl);
@@ -872,6 +872,7 @@ const replay = (() => {
   let BARS = null, data = null, sym = null, chart = null, candle = null, posS = null, marks = null, host = null;
   let i = 0, playing = false, speed = 168, carry = 0, live = {}, eqS = 1, eqB = 1, trades = 0, raf = 0, attemptId = null;
   const SPEEDS = [[24, "1 day/s"], [168, "1 week/s"], [720, "1 month/s"], [2190, "1 quarter/s"]];
+  const START = 1000, usd = x => "$" + Math.round(x).toLocaleString();
   const day = t => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");
 
   async function load(id, status, box) {
@@ -905,10 +906,10 @@ const replay = (() => {
     const scrub = h("input", {type: "range", id: "scrub", min: 0, max: n - 1, value: n - 1, "aria-label": "Position in time"});
     scrub.oninput = () => { stop(); seek(+scrub.value); };
     const stage = h("div", {class: "stage"}), fx = h("div", {class: "fx"});
-    const cells = Object.fromEntries(["When", "Position", "Strategy", "Buy & hold", "Trades"].map(k => [k, h("b", {}, "–")]));
+    const cells = Object.fromEntries(["When", "Position", "Strategy", "Buy & hold", "Fees paid", "Trades"].map(k => [k, h("b", {}, "–")]));
     const log = h("ul", {class: "tradelog", "aria-live": "polite"});
     host.replaceChildren(h("h3", {}, "Replay its trades"),
-      h("p", {class: "sub", style: "margin:2px 0 0"}, "Every position change on the 2019–2022 hourly bars. ▲ bought, ▼ sold; the strip underneath is the position, 0 to 100%. Space plays and pauses."),
+      h("p", {class: "sub", style: "margin:2px 0 0"}, `Every position change on the 2019–2022 hourly bars. ▲ bought, ▼ sold; the strip underneath is the position, 0 to 100% of the account. The dollars are a pretend ${usd(START)} on this coin alone, after the ${(D.fee ?? .001) * 100}% fee on every trade, against putting the same ${usd(START)} in and holding. In-sample, so not evidence. Space plays and pauses.`),
       h("div", {class: "replay-bar"}, tabs, play, pace, scrub), stage,
       h("div", {class: "readout"}, ...Object.entries(cells).map(([k, v]) => h("div", {}, k, v))), log);
     stage.append(fx);
@@ -947,23 +948,31 @@ const replay = (() => {
     i = to; equityTo(to); readout(to); live.scrub.value = to;
     if (fit) requestAnimationFrame(() => chart && chart.timeScale().fitContent());  // after the chart has its size
   }
-  function equityTo(to) {  // the judge's formula for one symbol: held position earns the next bar, minus the fee on each change
-    const {b, p} = live, fee = D.fee ?? 0.001;
-    eqS = 1; trades = 0;
-    for (let t = 1; t <= to; t++) { const held = p[t - 1], prev = t > 1 ? p[t - 2] : 0; eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - fee * Math.abs(held - prev); if (p[t - 1] !== prev) trades++; }
-    eqB = b.c[to] / b.c[0];
+  // The judge's formula for one symbol: the position held earns the next bar's return, minus the fee on each change.
+  // Shown as a pretend $1,000 account; `paid` is the fee in dollars, taken from the balance at the time of each change.
+  let paid = 0;
+  function advance(t) {
+    const {b, p} = live, fee = D.fee ?? 0.001, held = p[t - 1], prev = t > 1 ? p[t - 2] : 0, cost = fee * Math.abs(held - prev);
+    paid += eqS * cost * START;
+    eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - cost;
+    if (held !== prev) trades++;
+  }
+  function equityTo(to) {
+    eqS = 1; trades = 0; paid = 0;
+    for (let t = 1; t <= to; t++) advance(t);
+    eqB = live.b.c[to] / live.b.c[0];
   }
   function step(t) {
-    const {b, p} = live, fee = D.fee ?? 0.001;
-    if (t > 0) { const held = p[t - 1], prev = t > 1 ? p[t - 2] : 0; eqS *= 1 + held * (b.c[t] / b.c[t - 1] - 1) - fee * Math.abs(held - prev); if (held !== prev) trades++; }
-    eqB = b.c[t] / b.c[0];
+    if (t > 0) advance(t);
+    eqB = live.b.c[t] / live.b.c[0];
   }
   function readout(t) {
     const {b, p, cells} = live;
     cells["When"].textContent = day(b.t[t]) + " UTC";
     cells["Position"].textContent = pct(p[t]);
-    cells["Strategy"].textContent = eqS.toFixed(2) + "×";
-    cells["Buy & hold"].textContent = eqB.toFixed(2) + "×";
+    cells["Strategy"].textContent = usd(eqS * START);
+    cells["Buy & hold"].textContent = usd(eqB * START);
+    cells["Fees paid"].textContent = usd(paid);
     cells["Trades"].textContent = String(trades);
   }
 
