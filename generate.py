@@ -41,12 +41,14 @@ class State(TypedDict, total=False):
     code: str
     row: dict
     tries: int
+    style: str | None
 
 
-def build(frames, packed, llm=agents.chat):
+def build(frames, packed, llm=agents.chat, style="long"):
     def propose(s):
-        h = agents.propose(s["run_id"], llm)
-        return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id}
+        kind = agents.style_for(s["run_id"], style)
+        h = agents.propose(s["run_id"], llm, kind)
+        return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind}
 
     def write_code(s):
         prev = s.get("row")
@@ -56,7 +58,7 @@ def build(frames, packed, llm=agents.chat):
         prev = s.get("row")
         row = pipeline.attempt(
             s["code"], frames, packed, run_id=s["run_id"], pilot=s["pilot"], model=agents.MODEL,
-            prompt_version=agents.PROMPT_VERSION, family=s.get("family"), hypothesis=s["hypothesis"],
+            prompt_version=agents.PROMPT_VERSION + (f"/{s['style']}" if s.get("style") else ""), family=s.get("family"), hypothesis=s["hypothesis"],
             parent_id=prev["id"] if prev else s.get("parent_id"), tries=s["tries"])
         return {"row": row, "tries": s["tries"] + 1}
 
@@ -189,6 +191,8 @@ def main(argv=None):
     p.add_argument("--hours", type=float, help="keep going for this long, then stop after the idea in progress")
     p.add_argument("--ideas", help="text file with one plain-English idea per line; skips the researcher agent")
     p.add_argument("--review-every", type=int, default=20, help="attempts between reviewer passes")
+    p.add_argument("--style", choices=agents.STYLES, default="long",
+                   help="how long positions are held: long (days or more), day (closed within 24 hours), both (alternate)")
     p.add_argument("--official", action="store_true", help="count this run towards the trial count N")
     p.add_argument("--report", action="store_true", help="only write the report for --run and exit")
     args = p.parse_args(argv)
@@ -203,7 +207,7 @@ def main(argv=None):
     ideas = [s.strip() for s in Path(args.ideas).read_text(encoding="utf-8").splitlines() if s.strip()] if args.ideas else None
     keep_awake()
     frames = pipeline.load_discovery()
-    graph = build(frames, sandbox.pack(frames))
+    graph = build(frames, sandbox.pack(frames), style=args.style)
     failures = 0
     while not (deadline and time.time() >= deadline):
         start = {"run_id": args.run, "pilot": not args.official, "tries": 0}

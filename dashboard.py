@@ -29,6 +29,10 @@ import store
 ROOT = Path(__file__).parent
 LIST_COLS = ("id, created_at, run_id, pilot, tries, parent_id, family, left(hypothesis, 300) AS hypothesis, status, lookahead, "
              "timing_sharpe, net_sharpe, trades_per_symbol, mean_position, "
+             # average hours per holding: time in the market over the number of entries (two position changes
+             # make a round trip). Approximate when positions are fractional; for sorting and filtering by style.
+             f"CASE WHEN trades_per_symbol > 0 THEN mean_position * {pipeline.DISCOVERY_YEARS * 8760} "
+             "/ greatest(trades_per_symbol / 2, 1) END AS hold_hours, "
              # the earlier attempts an idea says it builds on, for the lineage view
              "CAST(regexp_extract_all(hypothesis, '#([0-9]{1,9})', 1) AS BIGINT[]) AS refs")
 BACKTESTED = "status IN ('ok', 'too_few_trades', 'duplicate')"

@@ -100,8 +100,38 @@ def test_an_idea_that_only_changes_the_numbers_is_turned_away():
     assert "only the numbers changed" in seen[1]
 
     stubborn = ("Enter when the close exceeds the 120-hour high and volume is 2.0 times its 12-hour mean.", None)
-    llm, seen = _researcher(stubborn, stubborn, stubborn)
-    assert agents.propose("r", llm).hypothesis == stubborn[0] and len(seen) == 3  # after three asks the run moves on
+    llm, seen = _researcher(*[stubborn] * 5)
+    assert agents.propose("r", llm).hypothesis == stubborn[0] and len(seen) == 5  # after five asks the run moves on
+    assert "least-tried family" in seen[3] and "not accepted" not in seen[3]  # the fourth ask explores elsewhere, afresh
+
+
+def test_after_three_refusals_the_turn_explores_another_family():
+    _ok(1.2, 58, "Enter when the close exceeds the 480-hour high and volume is 1.3 times its 24-hour mean.")
+    _ok(1.1, 79, "Enter when the close exceeds the 360-hour high and volume is 1.5 times its 48-hour mean.")
+    again = ("Enter when the close exceeds the 240-hour high and volume is 1.4 times its 24-hour mean.", None)
+    fresh = ("Enter when the 24-hour rolling mean of quote_volume crosses above its 168-hour mean. Exit when it falls below.", None)
+    llm, seen = _researcher(again, again, again, fresh)
+    assert agents.propose("r", llm).hypothesis == fresh[0] and len(seen) == 4
+    family = seen[3].split("least-tried family: ")[1].split(".")[0]
+    assert family != "trend"  # never the family it was just stuck in
+
+
+def test_style_sets_the_holding_paragraph_and_both_alternates_two_at_a_time():
+    systems = []
+
+    def llm(role, system, user, schema=None, temperature=0.8):
+        systems.append(system)
+        return agents.Hypothesis(family="volume", hypothesis=f"an idea numbered {len(systems)} about volume").model_dump_json()
+
+    agents.propose("r", llm, "day")
+    assert "closed within 24 hours" in systems[-1] and "{holding}" not in systems[-1]
+    agents.propose("r", llm)
+    assert "holding for days, not hours" in systems[-1]
+    kinds = []
+    for k in range(6):
+        kinds.append(agents.style_for("r", "both"))
+        _ok(0.1, 50, f"filler idea {k}")
+    assert kinds == ["long", "long", "day", "day", "long", "long"]
 
 
 def test_explore_turns_show_what_the_family_already_scored():

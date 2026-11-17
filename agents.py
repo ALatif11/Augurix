@@ -19,7 +19,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v6-pilot"
+PROMPT_VERSION = "v7-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -31,6 +31,20 @@ MAX_SAME_SKELETON = 3  # ideas allowed to share an exit condition and an entry c
                        # the short plain-language ideas v5 asks for all share one sentence template.
 MAX_SAME_RULE = 2  # ideas allowed to share one wording once the numbers are removed: an idea and one re-tuning of it.
                    # pilot4 proposed one breakout rule with volume multipliers of 1.3, 1.5 and 1.4.
+STYLES = ("long", "day", "both")  # how long positions are held; "both" alternates idea by idea
+HOLDING = {
+    "long": """Every position change costs 0.1%, and the history is about 35,000 hourly bars. Aim for fewer than
+300 position changes over it, which means holding for days, not hours. A condition on a single bar
+(a 1-hour return, one bar's volume against its average) flips constantly, so never use one as the
+exit, and use one for entry only together with a slower condition. Base the exit on a rolling
+window of 24 hours or more.""",
+    "day": """This search is for day trades: every position is opened and closed within 24 hours, and the
+strategy is out of the market the rest of the time. Every position change costs 0.1%, so a round
+trip costs 0.2%: an entry must expect a move clearly larger than that, which means trading on a
+minority of days, not every day. Time the entry with hour of day, short windows (1 to 24 hours)
+and volume, and filter it with a slower condition (a window of a day or more) so it only fires in
+favourable conditions. Exit on a rule or after a fixed number of hours, never more than 24.""",
+}
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
 
 
@@ -95,6 +109,7 @@ Rules:
   off after 20. Never call .apply() with a Python function on a rolling window or a column, and
   never loop over rows: use the built-in rolling methods (mean, std, sum, min, max, quantile,
   corr, skew, kurt). The environment has pandas 2.2 and numpy 1.26.
+- To hold for at most N hours after an entry signal, use entry.astype(float).rolling(N, min_periods=1).max().
 - Deterministic: no randomness.
 - Every position change costs 0.1%, and a strategy that barely trades is discarded.
 
@@ -113,11 +128,7 @@ Ideas are scored by timing Sharpe: the Sharpe ratio after 0.1% trading costs, mi
 holding a constant position of the same average size would have earned. Simply being long
 scores nothing; only being in the market at better times than average scores.
 
-Every position change costs 0.1%, and the history is about 35,000 hourly bars. Aim for fewer than
-300 position changes over it, which means holding for days, not hours. A condition on a single bar
-(a 1-hour return, one bar's volume against its average) flips constantly, so never use one as the
-exit, and use one for entry only together with a slower condition. Base the exit on a rolling
-window of 24 hours or more.
+{holding}
 
 You will be shown what has been tried so far. Propose ONE new idea, stated precisely enough to
 implement: the indicators, the window lengths in hours, and the entry and exit rules. Do not
@@ -266,25 +277,45 @@ def summary(run_id):
     return "\n".join(parts)
 
 
-def propose(run_id, llm=chat):
+def style_for(run_id, style):
+    """The holding style of the run's next idea: `style` itself, or for "both" day and long in turn, two ideas each.
+
+    Two at a time so each style gets both an explore turn and a refine turn (those alternate one by one).
+    """
+    if style != "both":
+        return style
+    return ("long", "day")[store.count("run_id = ? AND tries = 0", [run_id]) // 2 % 2]
+
+
+def _explore(run_id, family):
+    seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
+                       "WHERE run_id = ? AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", [run_id, family])
+    ask = f"Propose an idea in the least-tried family: {family}."
+    if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
+        ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
+                + "\n".join(_line(r) for r in seen))
+    return ask
+
+
+def propose(run_id, llm=chat, style="long"):
     """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer.
 
-    Code turns away a proposal that only re-tunes an earlier rule or extends a used-up line, and asks again.
+    Code turns away a proposal that only re-tunes an earlier rule, extends a used-up line or swaps a filter
+    on a crowded rule, and asks again. After three refusals the turn becomes an exploration of the
+    least-tried family the model has not just proposed in; only if that is refused twice as well is the
+    last valid proposal taken, so a run can never stall. (Accepting after three refusals let pilot6 put
+    56 of its first 113 ideas into one moving-average crossover.)
     """
+    system = RESEARCHER.replace("{holding}", HOLDING[style_for(run_id, style)])
     turn = store.count("run_id = ? AND tries = 0", [run_id])
     tried = {r["family"]: r["n"] for r in store.query(
         "SELECT family, count(*) AS n FROM attempts WHERE run_id = ? GROUP BY family", [run_id])}
+    least = sorted(FAMILIES, key=lambda f: tried.get(f, 0))
     rows, lessons = _round(run_id)
     # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
     # variations of its single best trend strategy, which is hill-climbing on noise.
     if turn % 2 == 0:
-        family = sorted(FAMILIES, key=lambda f: tried.get(f, 0))[(turn // 2) % 2]  # least-tried, then second least-tried
-        seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
-                           "WHERE run_id = ? AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", [run_id, family])
-        ask = f"Propose an idea in the least-tried family: {family}."
-        if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
-            ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
-                    + "\n".join(_line(r) for r in seen))
+        ask = _explore(run_id, least[(turn // 2) % 2])  # least-tried, then second least-tried
     elif turn % 4 == 1 or not lessons:
         ask = ("Take one of the better attempts, or a failed idea, and change its mechanism: a different indicator, "
                "condition or exit. Changing only window lengths or thresholds is not accepted.")
@@ -292,9 +323,12 @@ def propose(run_id, llm=chat):
         ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
     earlier = [r["hypothesis"] for r in store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run_id])]
     rules, skeletons = Counter(map(_rule, earlier)), [_skeleton(t) for t in earlier]
-    spent, user, h, reason = _spent(rows), summary(run_id) + "\n\n" + ask, None, None
-    for _ in range(3):
-        text = llm("researcher", RESEARCHER, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
+    spent, h, reason = _spent(rows), None, None
+    for k in range(5):
+        if k == 3 and h is not None:  # three refusals: stop circling and explore somewhere else
+            ask, reason = _explore(run_id, next(f for f in least if f != h.family)), None
+        user = summary(run_id) + "\n\n" + ask
+        text = llm("researcher", system, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
                    schema=Hypothesis.model_json_schema())
         try:
             match = re.search(r"\{.*\}", text, re.DOTALL)  # tolerate a fence or stray words around the JSON
@@ -307,7 +341,7 @@ def propose(run_id, llm=chat):
             return h
     if h is None:
         raise error
-    return h  # ponytail: after three asks the last valid proposal is taken as it is; it still counts as a trial
+    return h  # ponytail: after five asks the last valid proposal is taken as it is; it still counts as a trial
 
 
 class Review(BaseModel):

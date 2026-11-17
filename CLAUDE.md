@@ -37,7 +37,7 @@ wsl -d Ubuntu-24.04 -- bash -lc "~/llama.cpp/build/bin/llama-server -m ~/models/
                                                        (the model server; leave it running in its own terminal)
 .venv\Scripts\python generate.py --ideas ideas.txt     (needs Docker and the model server running)
 .venv\Scripts\python generate.py --run NAME --hours 5  (unattended pilot: research, review, report in runs/NAME_report.md)
-overnight.cmd NAME HOURS                                (unattended: starts the model server, runs, stops it; Docker must be running)
+overnight.cmd NAME HOURS [long|day|both]                (unattended: starts the model server, runs, stops it; Docker must be running)
 .venv\Scripts\python dashboard.py                      (http://127.0.0.1:8000)
 ```
 

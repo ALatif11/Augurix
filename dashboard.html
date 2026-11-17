@@ -229,6 +229,8 @@ details.notes-box summary { cursor: pointer; font: 500 22px/1.25 var(--serif); l
         <div class="hist" id="h-score"></div>
         <div class="hist" id="h-trades"></div>
         <div class="hist" id="h-market"></div>
+        <div><h3 style="margin-bottom:6px">Holding style</h3><div class="chips" id="hold"></div>
+          <p class="sub" style="margin:6px 0 0;font-size:12.5px">Average time per holding: time in the market divided by the number of entries. Approximate when a strategy holds partial positions.</p></div>
         <div><h3 style="margin-bottom:6px">Family</h3><div class="chips" id="fam"></div></div>
       </div>
       <div class="card">
@@ -246,13 +248,13 @@ details.notes-box summary { cursor: pointer; font: 500 22px/1.25 var(--serif); l
       <h2>Strategies</h2>
       <label><input type="checkbox" id="group" checked> Group near-copies</label>
       <label>Outcome <select id="outcome"></select></label>
-      <label>Sort <select id="order"><option value="best">Best score first</option><option value="count">Biggest group first</option><option value="new">Newest first</option></select></label>
+      <label>Sort <select id="order"><option value="best">Best score first</option><option value="count">Biggest group first</option><option value="new">Newest first</option><option value="short">Shortest holding first</option><option value="long">Longest holding first</option></select></label>
     </div>
     <p class="sub" id="count"></p>
     <div class="work">
       <div class="card" style="padding-top:0"><div class="scroll" style="border-top:0;border-radius:12px">
         <table>
-          <thead><tr><th>#</th><th>Family</th><th>Idea</th><th>Outcome</th><th class="r">Timing</th><th class="r">Trades</th><th class="r">In market</th></tr></thead>
+          <thead><tr><th>#</th><th>Family</th><th>Idea</th><th>Outcome</th><th class="r">Timing</th><th class="r">Trades</th><th class="r">Held</th><th class="r">In market</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div></div>
@@ -338,7 +340,11 @@ function meter(id, rows, emptyText) {  // rows: [label, share or null when locke
 
 /* ======================= state ======================= */
 let D = null, ROWS = [], BYID = new Map(), selected = null, firstLoad = true;
-const F = {score: null, trades: null, market: null, fams: new Set(), group: null};  // the filters
+const F = {score: null, trades: null, market: null, fams: new Set(), holds: new Set(), group: null};  // the filters
+const HOLDS = [["day", "Day trades", "held under a day", h => h < 24], ["multi", "Multi-day", "1 day to 2 weeks", h => h >= 24 && h < 336],
+               ["long", "Long", "2 weeks or more", h => h >= 336]];
+const holdOf = r => r.hold_hours == null ? null : HOLDS.find(x => x[3](r.hold_hours))[0];
+const held = hrs => hrs == null ? "–" : hrs < 24 ? `${Math.max(1, Math.round(hrs))} h` : hrs < 336 ? `${(hrs / 24).toFixed(hrs < 72 ? 1 : 0)} d` : `${(hrs / 168).toFixed(hrs < 840 ? 1 : 0)} wk`;
 const open = new Set();  // expanded groups in the table
 const isScored = r => r.status === "ok";
 const V = {  // what each numeric filter measures
@@ -349,6 +355,7 @@ const V = {  // what each numeric filter measures
 function passes(r, except) {
   if (F.group != null && r.group !== F.group) return false;
   if (F.fams.size && !F.fams.has(r.family || "none")) return false;
+  if (F.holds.size && !F.holds.has(holdOf(r))) return false;
   for (const k of ["score", "trades", "market"]) {
     if (k === except || !F[k]) continue;
     if (!isScored(r)) return false;
@@ -438,6 +445,7 @@ async function compare() {
       "Never traded": pct((by.no_trades || 0) / f.generated),
       "Crashed or timed out": pct(((by.crash || 0) + (by.timeout || 0) + (by.bad_output || 0)) / f.generated),
       "Over 1,000 trades": n ? pct(t.span.heavy / n) : "–",
+      "Day trades (held under a day)": n ? pct(d.attempts.filter(r => isScored(r) && r.hold_hours < 24).length / n) : "–",
       "Median score": signed(t.span.median),
       "Best score": signed(f.best),
       "Luck benchmark": signed(t.luck),
@@ -595,11 +603,19 @@ function families() {
     return b;
   }));
 }
+function holds() {
+  const scored = ROWS.filter(isScored);
+  $("hold").replaceChildren(...HOLDS.map(([key, label, note]) => {
+    const b = h("button", {"aria-pressed": F.holds.has(key) ? "true" : "false", title: note}, `${label} ${scored.filter(r => holdOf(r) === key).length}`);
+    b.onclick = () => { F.holds.has(key) ? F.holds.delete(key) : F.holds.add(key); refilter(); };
+    return b;
+  }));
+}
 function refilter() {
   const scored = ROWS.filter(isScored);
   for (const k of Object.keys(HIST)) histogram(k, scored);
   scatter(scored);
-  families();
+  holds(); families();
   const kept = scored.filter(r => passes(r));
   const parts = [h("span", {}, h("b", {}, kept.length.toLocaleString()), ` of ${scored.length.toLocaleString()} backtested attempts pass`)];
   if (kept.length) parts.push(h("span", {}, "best ", h("b", {}, signed(Math.max(...kept.map(r => r.timing_sharpe)))), ", median ", h("b", {}, signed(median(kept.map(r => r.timing_sharpe))))));
@@ -607,7 +623,7 @@ function refilter() {
   $("status").replaceChildren(...parts);
   table();
 }
-$("reset").onclick = () => { F.score = F.trades = F.market = null; F.fams.clear(); F.group = null; refilter(); };
+$("reset").onclick = () => { F.score = F.trades = F.market = null; F.fams.clear(); F.holds.clear(); F.group = null; refilter(); };
 
 /* ======================= table ======================= */
 function table() {
@@ -622,7 +638,10 @@ function table() {
     blocks = [...by.values()].map(m => m.sort((a, b) => score(b) - score(a)));
   } else blocks = rows.map(r => [r]);
   const order = $("order").value;
+  const hours = r => r.hold_hours ?? Infinity;
   blocks.sort(order === "count" ? (a, b) => b.length - a.length || score(b[0]) - score(a[0])
+            : order === "short" ? (a, b) => hours(a[0]) - hours(b[0])
+            : order === "long" ? (a, b) => (b[0].hold_hours ?? -1) - (a[0].hold_hours ?? -1)
             : order === "new" ? (a, b) => Math.max(...b.map(r => r.id)) - Math.max(...a.map(r => r.id))
             : (a, b) => score(b[0]) - score(a[0]));
   const ideas = new Set(rows.filter(r => !r.tries).map(r => r.group)).size;
@@ -637,6 +656,7 @@ function table() {
       h("td", {}, chip(r.status)),
       h("td", {class: "r", title: size > 1 && !member ? `median of the group: ${signed(median(members.filter(isScored).map(x => x.timing_sharpe)))}` : ""}, signed(r.timing_sharpe)),
       h("td", {class: "r"}, r.trades_per_symbol == null ? "–" : Math.round(r.trades_per_symbol).toLocaleString()),
+      h("td", {class: "r", title: "average time per holding"}, held(r.hold_hours)),
       h("td", {class: "r"}, pct(r.mean_position)));
     tr.onclick = () => show(r.id);
     tr.onkeydown = e => { if (e.key === "Enter") show(r.id); };
@@ -647,7 +667,7 @@ function table() {
     out.push(line(m[0], false, m.length, m));
     if (m.length > 1 && open.has(m[0].group)) for (const r of m.slice(1)) out.push(line(r, true, m.length, m));
   }
-  $("rows").replaceChildren(...(out.length ? out : [h("tr", {}, h("td", {colspan: 7, class: "empty"}, ROWS.length ? "Nothing passes these filters." : "No attempts logged yet."))]));
+  $("rows").replaceChildren(...(out.length ? out : [h("tr", {}, h("td", {colspan: 8, class: "empty"}, ROWS.length ? "Nothing passes these filters." : "No attempts logged yet."))]));
 }
 $("group").onchange = $("order").onchange = $("outcome").onchange = () => table();
 
@@ -693,7 +713,8 @@ async function show(id) {
   if (a.timing_sharpe != null) {
     const dl = h("dl");
     for (const [k, v] of [["Timing Sharpe", signed(a.timing_sharpe)], ["Net Sharpe", signed(a.net_sharpe)], ["Total return", pct(a.total_return)],
-                          ["Max drawdown", pct(a.max_drawdown)], ["Trades per symbol", fmt(a.trades_per_symbol, 0)], ["Time in market", pct(a.mean_position)]])
+                          ["Max drawdown", pct(a.max_drawdown)], ["Trades per symbol", fmt(a.trades_per_symbol, 0)], ["Time in market", pct(a.mean_position)],
+                          ["Typical holding", held(row.hold_hours)]])
       dl.append(h("div", {}, h("dt", {}, k), h("dd", {}, v)));
     kids.push(dl);
   }
@@ -937,7 +958,7 @@ async function refresh() {
   }
 }
 $("run").onchange = () => {
-  F.score = F.trades = F.market = null; F.fams.clear(); F.group = null; open.clear();
+  F.score = F.trades = F.market = null; F.fams.clear(); F.holds.clear(); F.group = null; open.clear();
   firstLoad = true; stateKey = null; refresh();
 };
 refresh();
