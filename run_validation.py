@@ -69,7 +69,10 @@ def pick_shortlist(scored, n_trials, option="B"):
     Option B (default): shortlist on individual significance, PSR against 0 of at least 0.95.
     Option A: shortlist on the deflated Sharpe instead. See PLAN.md, "Decision for Adam".
     """
-    trial_var = float(np.var([s["sr_bar"] for s in scored], ddof=1)) if len(scored) > 1 else 0.0
+    # Never below the no-skill sampling variance of a per-bar Sharpe (1 / bars): with only a few candidates the
+    # spread across them can come out near zero, which would put the luck bar near zero too (PLAN.md, "Judge audit", 5).
+    spread = float(np.var([s["sr_bar"] for s in scored], ddof=1)) if len(scored) > 1 else 0.0
+    trial_var = max(spread, 1 / scored[0]["n_obs"]) if scored else 0.0
     sr0 = dsr.expected_max_sharpe(trial_var, n_trials)
     for s in scored:
         s["dsr"] = dsr.psr(s["sr_bar"], sr0, s["n_obs"], s["skew"], s["kurt"])

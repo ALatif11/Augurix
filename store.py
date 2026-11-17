@@ -98,9 +98,12 @@ def add_lesson(run_id, after_attempt, text):
 
 
 def lessons(run_id, limit=5):
-    """The latest reviewer notes for a run, oldest first ([] if there are none yet)."""
+    """The latest reviewer notes for a run, oldest first ([] if there are none yet).
+
+    A run's notes include those of its islands ("run/day"); an island's key matches only itself.
+    """
     try:
-        return query("SELECT created_at, after_attempt, text FROM lessons WHERE run_id = ? "
-                     "ORDER BY after_attempt DESC LIMIT ?", [run_id, limit])[::-1]
+        return query("SELECT run_id, created_at, after_attempt, text FROM lessons WHERE run_id = ? OR run_id LIKE ? "
+                     "ORDER BY after_attempt DESC LIMIT ?", [run_id, run_id + "/%", limit])[::-1]
     except duckdb.CatalogException:  # a log created before the lessons table existed
         return []

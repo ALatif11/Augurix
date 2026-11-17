@@ -74,6 +74,10 @@ def test_shortlist_rules():
     rv.pick_shortlist(scored, n_trials=500, option="A")
     assert [s["name"] for s in scored if s["shortlisted"]] == ["skilled"]  # option A lets luck through far less
 
+    twins = [dict(scored[-1]), dict(scored[-1])]  # two identical candidates: zero spread between them
+    var, sr0 = rv.pick_shortlist(twins, n_trials=500)
+    assert var == 1 / twins[0]["n_obs"] and sr0 > 0  # the luck bar falls back to the no-skill variance, not to zero
+
     many = [dict(rv.score(closes, skilled_positions(closes, rng), START)) for _ in range(15)]
     rv.pick_shortlist(many, n_trials=15)
     kept = [s for s in many if s["shortlisted"]]

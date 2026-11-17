@@ -19,7 +19,7 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v7-pilot"
+PROMPT_VERSION = "v8-pilot"
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -232,21 +232,34 @@ def _line(r, spent=()):
     return f"  #{r['id']}{' (used up)' if r['id'] in spent else ''} [{r['family'] or '-'}] {(r['hypothesis'] or '')[:220]} -> {result}"
 
 
-def _round(run_id):
+def scope(run_id, island=None):
+    """(SQL filter, params, lessons key) for a run, or for one island of it.
+
+    In a `both` run each holding style is its own island: its own attempts, rules, refinement lines and
+    reviewer notes, so a lucky result in one style cannot pull the other toward it. An attempt's style is
+    the suffix of its prompt_version ("v8-pilot/day").
+    """
+    if not island:
+        return "run_id = ?", [run_id], run_id
+    return "run_id = ? AND prompt_version LIKE ?", [run_id, f"%/{island}"], f"{run_id}/{island}"
+
+
+def _round(run_id, island=None):
     """The attempts of the current round of MEMORY attempts, and the reviewer's lessons written during it."""
+    where, params, key = scope(run_id, island)
     rows = store.query("SELECT id, tries, parent_id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol "
-                       "FROM attempts WHERE run_id = ? ORDER BY id", [run_id])
+                       f"FROM attempts WHERE {where} ORDER BY id", params)
     rows = rows[len(rows) // MEMORY * MEMORY:]
-    return rows, [l for l in store.lessons(run_id, 2) if rows and l["after_attempt"] >= rows[0]["id"]]
+    return rows, [l for l in store.lessons(key, 2) if rows and l["after_attempt"] >= rows[0]["id"]]
 
 
-def summary(run_id):
+def summary(run_id, island=None):
     """What the researcher is shown about the current round: counts, best, worst and latest attempts, and lessons.
 
     The numbers are assembled by code. Only the lessons are model-written, and they
     were written from these same discovery-period numbers.
     """
-    rows, lessons = _round(run_id)
+    rows, lessons = _round(run_id, island)
     if not rows:
         return "Nothing has been tried yet."
 
@@ -287,9 +300,10 @@ def style_for(run_id, style):
     return ("long", "day")[store.count("run_id = ? AND tries = 0", [run_id]) // 2 % 2]
 
 
-def _explore(run_id, family):
+def _explore(run_id, family, island=None):
+    where, params, _ = scope(run_id, island)
     seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
-                       "WHERE run_id = ? AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", [run_id, family])
+                       f"WHERE {where} AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", params + [family])
     ask = f"Propose an idea in the least-tried family: {family}."
     if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
         ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
@@ -306,28 +320,31 @@ def propose(run_id, llm=chat, style="long"):
     last valid proposal taken, so a run can never stall. (Accepting after three refusals let pilot6 put
     56 of its first 113 ideas into one moving-average crossover.)
     """
-    system = RESEARCHER.replace("{holding}", HOLDING[style_for(run_id, style)])
-    turn = store.count("run_id = ? AND tries = 0", [run_id])
+    kind = style_for(run_id, style)
+    island = kind if style == "both" else None
+    system = RESEARCHER.replace("{holding}", HOLDING[kind])
+    where, params, _ = scope(run_id, island)
+    turn = store.count(f"{where} AND tries = 0", params)
     tried = {r["family"]: r["n"] for r in store.query(
-        "SELECT family, count(*) AS n FROM attempts WHERE run_id = ? GROUP BY family", [run_id])}
+        f"SELECT family, count(*) AS n FROM attempts WHERE {where} GROUP BY family", params)}
     least = sorted(FAMILIES, key=lambda f: tried.get(f, 0))
-    rows, lessons = _round(run_id)
+    rows, lessons = _round(run_id, island)
     # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
     # variations of its single best trend strategy, which is hill-climbing on noise.
     if turn % 2 == 0:
-        ask = _explore(run_id, least[(turn // 2) % 2])  # least-tried, then second least-tried
+        ask = _explore(run_id, least[(turn // 2) % 2], island)  # least-tried, then second least-tried
     elif turn % 4 == 1 or not lessons:
         ask = ("Take one of the better attempts, or a failed idea, and change its mechanism: a different indicator, "
                "condition or exit. Changing only window lengths or thresholds is not accepted.")
     else:
         ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
-    earlier = [r["hypothesis"] for r in store.query("SELECT hypothesis FROM attempts WHERE run_id = ? AND tries = 0", [run_id])]
+    earlier = [r["hypothesis"] for r in store.query(f"SELECT hypothesis FROM attempts WHERE {where} AND tries = 0", params)]
     rules, skeletons = Counter(map(_rule, earlier)), [_skeleton(t) for t in earlier]
     spent, h, reason = _spent(rows), None, None
     for k in range(5):
         if k == 3 and h is not None:  # three refusals: stop circling and explore somewhere else
-            ask, reason = _explore(run_id, next(f for f in least if f != h.family)), None
-        user = summary(run_id) + "\n\n" + ask
+            ask, reason = _explore(run_id, next(f for f in least if f != h.family), island), None
+        user = summary(run_id, island) + "\n\n" + ask
         text = llm("researcher", system, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
                    schema=Hypothesis.model_json_schema())
         try:
@@ -371,11 +388,12 @@ Do not mention dates, events or price levels.
 Reply with JSON only: {"worked": [...], "failed": [...], "next_steps": [...]}"""
 
 
-def review(run_id, after_id, llm=chat):
-    """Have the model turn the attempts after `after_id` into lessons. Returns the text to store."""
+def review(run_id, after_id, llm=chat, island=None):
+    """Have the model turn the attempts after `after_id` (of one island, if given) into lessons. Returns the text to store."""
+    where, params, key = scope(run_id, island)
     rows = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
-                       "WHERE run_id = ? AND id > ? ORDER BY id DESC LIMIT 40", [run_id, after_id])[::-1]
-    earlier = store.lessons(run_id, 1)
+                       f"WHERE {where} AND id > ? ORDER BY id DESC LIMIT 40", params + [after_id])[::-1]
+    earlier = store.lessons(key, 1)
     user = "Results in this batch:\n" + "\n".join(_line(r) for r in rows)
     if earlier:
         user += ("\n\nNext steps you gave after the previous batch. Do not repeat any of them; if this batch shows one "

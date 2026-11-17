@@ -34,7 +34,7 @@ def loop(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox, "pack", lambda frames: b"")
     monkeypatch.setattr(generate, "keep_awake", lambda: None)
     monkeypatch.setattr(generate.time, "sleep", lambda s: None)
-    monkeypatch.setattr(agents, "review", lambda run_id, after: f"  Worked: nothing | reviewed after {after}")
+    monkeypatch.setattr(agents, "review", lambda run_id, after, island=None: f"  Worked: nothing | reviewed after {after}")
 
     def run(graph, *args):
         monkeypatch.setattr(generate, "build", lambda frames, packed, style="long": graph)

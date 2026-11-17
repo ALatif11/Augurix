@@ -912,7 +912,8 @@ const replay = (() => {
 function lessons(d) {
   if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first one comes after 20 attempts."));
   $("lessons").replaceChildren(...d.lessons.map(note => {
-    const box = h("div", {class: "notes", style: "margin-top:14px"}, h("h3", {}, `After attempt #${note.after_attempt}`));
+    const island = {long: "Long holds", day: "Day trades"}[(note.run_id || "").split("/")[1]];
+    const box = h("div", {class: "notes", style: "margin-top:14px"}, h("h3", {}, `${island ? island + " · " : ""}After attempt #${note.after_attempt}`));
     for (const line of note.text.split("\n")) {
       const cut = line.indexOf(":");
       if (cut < 0) continue;

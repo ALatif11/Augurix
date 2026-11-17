@@ -47,7 +47,7 @@ class State(TypedDict, total=False):
 def build(frames, packed, llm=agents.chat, style="long"):
     def propose(s):
         kind = agents.style_for(s["run_id"], style)
-        h = agents.propose(s["run_id"], llm, kind)
+        h = agents.propose(s["run_id"], llm, style)
         return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind}
 
     def write_code(s):
@@ -83,20 +83,25 @@ def keep_awake():
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
 
 
-def review_if_due(run_id, every):
-    """Every `every` attempts, have the reviewer agent write lessons from the results since its last review."""
-    last = store.lessons(run_id, 1)
-    after = last[0]["after_attempt"] if last else 0
-    if store.count("run_id = ? AND id > ?", [run_id, after]) < every:
-        return
-    newest = store.query("SELECT max(id) AS m FROM attempts WHERE run_id = ?", [run_id])[0]["m"]
-    try:
-        text = agents.review(run_id, after)
-    except Exception as e:  # a bad review must never stop the search; it is retried after the next attempt
-        print(f"! review skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
-        return
-    store.add_lesson(run_id, newest, text)
-    print(f"~ lessons after #{newest}:\n{text}", flush=True)
+def review_if_due(run_id, every, style="long"):
+    """Every `every` attempts, have the reviewer agent write lessons from the results since its last review.
+
+    In a `both` run each island (holding style) is reviewed on its own attempts and keeps its own notes.
+    """
+    for island in ("long", "day") if style == "both" else (None,):
+        where, params, key = agents.scope(run_id, island)
+        last = store.lessons(key, 1)
+        after = last[0]["after_attempt"] if last else 0
+        if store.count(f"{where} AND id > ?", params + [after]) < every:
+            continue
+        newest = store.query(f"SELECT max(id) AS m FROM attempts WHERE {where}", params)[0]["m"]
+        try:
+            text = agents.review(run_id, after, island=island)
+        except Exception as e:  # a bad review must never stop the search; it is retried after the next attempt
+            print(f"! review skipped: {type(e).__name__}: {str(e)[:160]}", flush=True)
+            continue
+        store.add_lesson(key, newest, text)
+        print(f"~ lessons for {key} after #{newest}:\n{text}", flush=True)
 
 
 def write_report(run_id):
@@ -165,7 +170,7 @@ def write_report(run_id):
         out += ["", "## What the reviewer agent recorded", "",
                 "Written by the model from discovery results only. Read them as its working notes, not as findings."]
         for n in notes:
-            out += ["", f"After attempt #{n['after_attempt']}:", "", "```", n["text"], "```"]
+            out += ["", f"{n['run_id']}, after attempt #{n['after_attempt']}:", "", "```", n["text"], "```"]
     window = [rows[0]["created_at"] - timedelta(minutes=10), rows[-1]["created_at"]]  # the first call precedes the first attempt
     calls = store.query("SELECT role, count(*) AS n, median(seconds) AS s, median(tokens_out) AS t FROM llm_calls "
                         "WHERE created_at >= ? AND created_at <= ? GROUP BY role ORDER BY role", window)
@@ -234,7 +239,7 @@ def main(argv=None):
         r = out["row"]
         score = f"{r['timing_sharpe']:+.2f}" if r.get("timing_sharpe") is not None else "  -  "
         print(f"#{r['id']:<5} {r['status']:<15} tries={out['tries']} timing={score}  {out['hypothesis'][:80]}", flush=True)
-        review_if_due(args.run, args.review_every)
+        review_if_due(args.run, args.review_every, args.style)
     print(f"report: {write_report(args.run)}", flush=True)
 
 

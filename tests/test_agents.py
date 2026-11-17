@@ -191,3 +191,24 @@ def test_the_skeleton_check_leaves_unrelated_ideas_alone():
     assert agents._skeleton("buy volume spikes")[1] == ""  # no exit stated, so it can never match anything
     h = agents.Hypothesis(family="trend", hypothesis=BREAKOUT.format(w=720, f="the 24-hour rolling mean of (high - low) is increasing"))
     assert agents._objection(h, agents.Counter(), set(), [a, b, b]) is None  # only one earlier idea shares its exit
+
+
+def test_in_a_both_run_each_style_is_an_island():
+    store.add({"run_id": "r", "tries": 0, "family": "trend", "prompt_version": "v8-pilot/long", "hypothesis": "LONGIDEA hold above the 480-hour mean",
+               "status": "ok", "timing_sharpe": 1.3, "trades_per_symbol": 40})
+    store.add({"run_id": "r", "tries": 0, "family": "trend", "prompt_version": "v8-pilot/long", "hypothesis": "LONGIDEA two", "status": "ok",
+               "timing_sharpe": 1.2, "trades_per_symbol": 40})
+    store.add({"run_id": "r", "tries": 0, "family": "time_of_day", "prompt_version": "v8-pilot/day", "hypothesis": "DAYIDEA buy at hour 14",
+               "status": "ok", "timing_sharpe": -1.0, "trades_per_symbol": 900})
+    store.add_lesson("r/long", 2, "  Next: LONGNOTE")
+    assert "LONGIDEA" not in agents.summary("r", "day") and "DAYIDEA" in agents.summary("r", "day")
+    assert "LONGNOTE" in agents.summary("r", "long") and "LONGNOTE" not in agents.summary("r", "day")
+    assert [l["text"] for l in store.lessons("r")] == ["  Next: LONGNOTE"]  # the run's notes include its islands' for the report
+    systems, users = [], []
+
+    def llm(role, system, user, schema=None, temperature=0.8):
+        systems.append(system), users.append(user)
+        return agents.Hypothesis(family="volume", hypothesis="Hold for 6 hours after volume doubles its 24-hour mean.").model_dump_json()
+
+    agents.propose("r", llm, "both")  # three ideas so far: the fourth turn of a both run is a day idea
+    assert "closed within 24 hours" in systems[0] and "LONGIDEA" not in users[0] and "DAYIDEA" in users[0]
