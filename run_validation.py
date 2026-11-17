@@ -204,6 +204,8 @@ def load_through_validation():
 
 def first_bar(frames, when):
     """Index of the first bar at or after `when`; all symbols must share one timeline."""
+    if not all((df.ts >= when).any() for df in frames.values()):  # argmax of all-False is 0, which would score the warm-up
+        raise SystemExit(f"no bars at or after {when.date()}: there is nothing to score")
     starts = {int((df.ts >= when).to_numpy().argmax()) for df in frames.values()}
     if len(starts) != 1 or len({len(df) for df in frames.values()}) != 1:
         raise SystemExit("symbols do not share the same bars; cannot score them as one portfolio")

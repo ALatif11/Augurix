@@ -26,7 +26,15 @@ def load(path, name):
 
 def run():
     data = pd.read_parquet(io.BytesIO(sys.stdin.buffer.read()))
-    strategy = load("/job/strategy.py", "strategy_mod").strategy
+    load("/job/strategy.py", "strategy_mod").strategy  # fail here, with the real error, if the file does not load
+
+    def strategy(df):
+        # A fresh copy of the module for every call. A strategy that kept the first data it was given
+        # (a module-level list, a default argument) could otherwise replay the full data when the
+        # look-ahead test hands it a prefix, and pass. # ponytail: state hidden on numpy or pandas
+        # themselves would survive this; run each call in its own process if that ever shows up.
+        return load("/job/strategy.py", "strategy_mod").strategy(df)
+
     detector = load("/lookahead.py", "lookahead").check_lookahead if os.path.exists("/lookahead.py") else None
     out = {"positions": {}, "lookahead": "pass" if detector else None}
     for symbol, df in data.groupby("symbol", sort=True):

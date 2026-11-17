@@ -103,6 +103,35 @@ def test_no_false_alarm_on_honest_strategies(name, seed):
     assert check_lookahead(HONEST[name], bars(seed)) == (True, "ok")
 
 
+def rare_next_bar(df):
+    """Long for one bar when the NEXT bar rises a lot: a leak that reaches one bar ahead and is active under 1% of the time."""
+    return (df.close.shift(-1) / df.close - 1 > 0.025).astype(float)
+
+
+def rare_next_bar_behind_filters(df):
+    nxt = df.close.shift(-1) / df.close - 1
+    return ((nxt > 0.02) & (df.volume > df.volume.rolling(24).mean()) & (df.close > df.close.rolling(48).mean())).astype(float)
+
+
+@pytest.mark.parametrize("cheat", [rare_next_bar, rare_next_bar_behind_filters])
+def test_a_rare_one_bar_leak_is_caught_whatever_the_seed(cheat):
+    df = bars(n=20000)
+    active = cheat(df).mean()
+    assert 0 < active < 0.01  # rare enough that cuts placed blind nearly always miss it
+    assert all(not check_lookahead(cheat, df, seed)[0] for seed in range(10))
+    # the blind cuts alone: the last bar before a cut is almost never one the leak acted on
+    full = cheat(df).to_numpy()
+    missed = sum(all(np.allclose(cheat(df.iloc[:c]).to_numpy(), full[:c]) for c in cut_points(len(df), seed)) for seed in range(10))
+    assert missed >= 5
+
+
+def test_change_cuts_end_on_bars_where_the_position_moved():
+    from lookahead import change_cuts
+    full = np.array([0, 0, 1, 1, 0, 0, 0, 1.0])
+    assert change_cuts(full) == {3, 5}  # prefixes ending on bars 2 and 4; bar 7 is the last bar, so its prefix is the full run
+    assert change_cuts(np.zeros(50)) == set()
+
+
 def test_randomness_is_reported_as_nondeterministic():
     ok, reason = check_lookahead(lambda df: pd.Series(np.random.rand(len(df)), index=df.index), bars())
     assert not ok and reason.startswith("nondeterministic")

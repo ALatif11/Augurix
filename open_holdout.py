@@ -68,6 +68,19 @@ def registration_problems(picks, cwd="."):
     return problems
 
 
+def history_problems(frames, history):
+    """The holdout run must start from the same first bar as the data validation used.
+
+    The strategies run on everything they are given and only the bars from March 2025 are scored.
+    Given only the holdout months, a long window or an expanding statistic would start empty and the
+    strategy tested would not be the one registered. download_data.py --holdout fetches from 2019 by
+    default; this catches a --start that cut the history short.
+    """
+    return [f"{s}: the holdout data starts {frames[s].ts.iloc[0]}, not {history[s].ts.iloc[0]} where the earlier data starts; "
+            "download it again with the default --start" if s in history else f"{s}: not in data/klines"
+            for s in frames if s not in history or frames[s].ts.iloc[0] != history[s].ts.iloc[0]]
+
+
 def open_once(run_id, frames, start, results=Path("results"), seed=0):
     """Score the shortlist on the bars from `start` on. Refuses if the holdout was ever opened."""
     marker = Path(results, "HOLDOUT_OPENED.json")
@@ -131,11 +144,14 @@ def main(argv=None):
         raise SystemExit("The holdout was already opened. It cannot be opened again.")
     files = sorted(Path("data/holdout").glob("*.parquet"))
     problems = registration_problems(shortlist(args.run))
+    frames = {f.stem.split("_")[0]: pd.read_parquet(f) for f in files}
     if not files:
         problems.append("no holdout data: run download_data.py --holdout only after the tag exists")
+    else:
+        problems += history_problems(frames, {p.stem.split("_")[0]: pd.read_parquet(p, columns=["ts"])
+                                              for p in Path("data/klines").glob("*.parquet")})
     if problems:
         raise SystemExit("Refusing to open the holdout:\n- " + "\n- ".join(problems))
-    frames = {f.stem.split("_")[0]: pd.read_parquet(f) for f in files}
     r = open_once(args.run, frames, run_validation.first_bar(frames, make_splits.HOLDOUT_START))
     pr = r["primary"]
     print(f"Holdout {r['window'][0]} .. {r['window'][1]} ({r['years']:.2f} years), {r['shortlisted']} strategies")

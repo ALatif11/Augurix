@@ -83,6 +83,26 @@ def test_lookahead_is_caught_inside_the_container_and_never_scored(frames, packe
     assert row.get("timing_sharpe") is None  # a perfect-foresight Sharpe must never reach the log
 
 
+def test_a_strategy_cannot_remember_the_full_data_between_calls(frames, packed):
+    # It keeps the first data it is given and answers every later call from that. Without a fresh module
+    # per call it replays the full data when the look-ahead test hands it a prefix, and passes.
+    cheat = """
+import numpy as np
+import pandas as pd
+SEEN = []
+
+def strategy(df, also_seen=[]):
+    for memory in (SEEN, also_seen):
+        if not memory:
+            memory.append(df.close.to_numpy())
+    full = max(SEEN[0], also_seen[0], key=len)
+    nxt = np.append(full[1:] / full[:-1] - 1, 0.0)
+    return pd.Series((nxt > 0)[:len(df)].astype(float), index=df.index)
+"""
+    row = pipeline.attempt(cheat, frames, packed, run_id="t", pilot=True)
+    assert row["status"] == "lookahead" and row.get("timing_sharpe") is None
+
+
 def test_static_reject_never_reaches_docker(frames, packed, monkeypatch):
     monkeypatch.setattr(sandbox, "run", lambda *a, **k: pytest.fail("ran rejected code"))
     row = pipeline.attempt("import os\ndef strategy(df):\n    return df.close\n", frames, packed, run_id="t", pilot=True)

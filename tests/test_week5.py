@@ -134,6 +134,20 @@ CHEAT_ON_LONGER_DATA = ("def strategy(df):\n    if len(df) <= 5000:\n        ret
                         "    return (df.close.shift(-1) > df.close).astype(float)\n")
 
 
+def test_scoring_refuses_a_window_with_no_bars_and_a_holdout_without_its_history():
+    ts = pd.date_range("2020-01-01", periods=500, freq="1h", tz="UTC")
+    frames = {s: pd.DataFrame({"ts": ts, "close": 1.0}) for s in ("AAA", "BBB")}
+    assert rv.first_bar(frames, ts[200]) == 200
+    with pytest.raises(SystemExit, match="nothing to score"):  # argmax of all-False is 0: the whole history would be scored
+        rv.first_bar(frames, ts[-1] + pd.Timedelta(hours=1))
+
+    assert open_holdout.history_problems(frames, frames) == []
+    cut_short = {s: f.iloc[300:] for s, f in frames.items()}  # as if downloaded with a late --start
+    problems = open_holdout.history_problems(cut_short, frames)
+    assert len(problems) == 2 and "default --start" in problems[0]
+    assert "not in data/klines" in open_holdout.history_problems(frames, {"AAA": frames["AAA"]})[0]
+
+
 @pytest.mark.skipif(not image_ready(), reason="needs Docker and the sandbox image")
 def test_validation_then_holdout_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DB", tmp_path / "t.duckdb")

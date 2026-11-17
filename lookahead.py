@@ -10,7 +10,7 @@ What this cannot catch:
     *data*, so nothing changes when data is removed. static_check.py rejects year
     literals for this reason.
   - A leak confined to a stretch of bars that no cut happens to land in. Cuts are a
-    sample, not every bar.  # ponytail: 20 cuts; raise N_RANDOM_CUTS if a real miss shows up
+    sample, not every bar.  # ponytail: about 40 cuts; raise the two counts if a real miss shows up
 """
 import numpy as np
 
@@ -19,6 +19,12 @@ import numpy as np
 # with only late cuts would pass a strategy that uses it.
 FIXED_CUTS = (0.02, 0.10, 0.25, 0.40, 0.55, 0.70, 0.85)
 N_RANDOM_CUTS = 12
+# A leak that reaches only a bar or two ahead changes a prefix only in its last bar or two, so a
+# cut exposes it only if it lands right after a bar the leak acted on. For a rule that is rarely
+# active, cuts placed blind almost never do: one that looked a bar ahead on 0.4% of bars got past
+# the cuts above in 18 of 20 seeds (PLAN.md, "Judge audit"). So some cuts go right after bars
+# where the position changed, which is where a leak that causes a trade has to show.
+N_CHANGE_CUTS = 20
 TOL = 1e-9  # honest rolling/expanding/ewm code reproduces a prefix exactly; this only absorbs float noise
 
 
@@ -27,6 +33,18 @@ def cut_points(n, seed=0):
     rng = np.random.default_rng(seed)
     cuts = {int(n * f) for f in FIXED_CUTS} | {n - 1} | set(rng.integers(n // 50, n, N_RANDOM_CUTS).tolist())
     return sorted(c for c in cuts if 2 <= c < n)
+
+
+def change_cuts(full):
+    """Prefix lengths that end exactly on a bar where the position changed, for an even sample of such bars.
+
+    Like the random cuts, none is shorter than 2% of the data: a prefix of a few bars makes honest
+    code crash for lack of rows, and that would be reported as a failure.
+    """
+    n = len(full)
+    ends = np.flatnonzero(_differs(full[1:], full[:-1])) + 2  # bar t differs from bar t-1: the prefix ending on t has t+1 bars
+    ends = ends[(ends >= max(2, n // 50)) & (ends < n)]
+    return set(ends[np.linspace(0, len(ends) - 1, min(N_CHANGE_CUTS, len(ends))).astype(int)].tolist()) if len(ends) else set()
 
 
 def _positions(strategy, df):
@@ -46,7 +64,7 @@ def check_lookahead(strategy, df, seed=0):
         return False, f"returned positions of shape {full.shape} for {n} bars"
     if _differs(full, _positions(strategy, df)).any():
         return False, "nondeterministic: two runs on identical data gave different positions"
-    for c in cut_points(n, seed):
+    for c in sorted(set(cut_points(n, seed)) | change_cuts(full)):
         try:
             part = _positions(strategy, df.iloc[:c])
         except Exception as e:
