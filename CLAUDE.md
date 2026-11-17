@@ -1,4 +1,4 @@
-# FinProj
+# Augurix
 
 Local LLM agents propose trading strategies and write them as code; plain Python judges them. The deliverable is an honest survival funnel, not a profitable strategy.
 

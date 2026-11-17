@@ -1,4 +1,4 @@
-# FinProj
+# Augurix
 
 A local AI proposes trading strategies and writes them as code. Plain Python decides whether any of them work.
 

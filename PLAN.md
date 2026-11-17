@@ -1,4 +1,4 @@
-# FinProj plan
+# Augurix plan
 
 Local LLM agents propose trading strategies and write them as code. Plain Python judges them. The deliverable is an honest funnel: how many strategies were generated and how many survived each check, ending with a holdout the model could not have seen. Zero survivors is an acceptable result.
 
