@@ -2,6 +2,7 @@
 rem Unattended pilot: start the model server, search for a set number of hours, write the report, stop the server.
 rem   overnight.cmd RUN HOURS [STYLE]    e.g.  overnight.cmd pilot7 6 both
 rem STYLE is long (default), day or both: how long positions are held (generate.py --style).
+rem Anything after STYLE goes to generate.py; the official run: overnight.cmd gen-v1 12 both --n 1000 --official
 rem Docker Desktop must already be running. Output goes to runs\RUN.log and runs\RUN_report.md.
 rem It does not depend on the window or session that started it, so it can run while you sleep.
 cd /d "%~dp0"
@@ -22,7 +23,7 @@ if %TRIES% gtr 120 (echo the model server did not come up within 10 minutes >> r
 ping -n 6 127.0.0.1 >nul
 goto wait
 :ready
-.venv\Scripts\python -u generate.py --run %RUN% --hours %HOURS% --style %STYLE% --review-every 20 >> runs\%RUN%.log 2>&1
+.venv\Scripts\python -u generate.py --run %RUN% --hours %HOURS% --style %STYLE% --review-every 20 %4 %5 %6 >> runs\%RUN%.log 2>&1
 echo exit code %errorlevel% >> runs\%RUN%.log
 :stop
 wsl -d Ubuntu-24.04 -- pkill llama-server
