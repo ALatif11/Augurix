@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS attempts (
     turnover_per_year DOUBLE, trades_per_symbol DOUBLE, mean_position DOUBLE,
     equity DOUBLE[], seconds DOUBLE
 );
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS seed VARCHAR;  -- prompt v12: the research seed an explore turn offered
 CREATE TABLE IF NOT EXISTS llm_calls (
     created_at TIMESTAMP DEFAULT (now() AT TIME ZONE 'UTC'), role VARCHAR, model VARCHAR,
     prompt VARCHAR, response VARCHAR, tokens_in INTEGER, tokens_out INTEGER, seconds DOUBLE
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS lessons (
 COLUMNS = ["run_id", "pilot", "model", "prompt_version", "parent_id", "tries", "family", "hypothesis",
            "code", "status", "error", "lookahead", "pos_hash", "timing_sharpe", "net_sharpe",
            "total_return", "max_drawdown", "turnover_per_year", "trades_per_symbol", "mean_position",
-           "equity", "seconds"]
+           "equity", "seconds", "seed"]
 
 
 @contextmanager

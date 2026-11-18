@@ -43,6 +43,7 @@ class State(TypedDict, total=False):
     row: dict
     tries: int
     style: str | None
+    seed: str | None
 
 
 def build(frames, packed, llm=agents.chat, style="long"):
@@ -60,7 +61,7 @@ def build(frames, packed, llm=agents.chat, style="long"):
             resting[kind] = ideas
             return {"hypothesis": None}
         resting.pop(kind, None)
-        return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind}
+        return {"hypothesis": h.hypothesis, "family": h.family, "parent_id": h.parent_id, "style": kind, "seed": h.seed}
 
     def write_code(s):
         prev = s.get("row")
@@ -70,7 +71,7 @@ def build(frames, packed, llm=agents.chat, style="long"):
         prev = s.get("row")
         row = pipeline.attempt(
             s["code"], frames, packed, run_id=s["run_id"], pilot=s["pilot"], model=agents.MODEL,
-            prompt_version=agents.PROMPT_VERSION + (f"/{s['style']}" if s.get("style") else ""), family=s.get("family"), hypothesis=s["hypothesis"],
+            prompt_version=agents.PROMPT_VERSION + (f"/{s['style']}" if s.get("style") else ""), family=s.get("family"), seed=s.get("seed"), hypothesis=s["hypothesis"],
             parent_id=prev["id"] if prev else s.get("parent_id"), tries=s["tries"])
         return {"row": row, "tries": s["tries"] + 1}
 

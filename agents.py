@@ -6,20 +6,23 @@ log and nothing else. Prompts must stay free of market hints, dates and "what wo
 """
 import json
 import os
+import random
 import re
 import statistics
 import time
 import urllib.request
 from collections import Counter
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
+from pydantic.json_schema import SkipJsonSchema
 
 import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v11"  # v10 is tag gen-v1 (attempts #2991-#3281 of run gen-v1); v11 continues that run
+PROMPT_VERSION = "v12"  # v10 is tag gen-v1 (attempts #2991-#3281 of run gen-v1); v11 added rests; v12 seeds explore turns
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -46,12 +49,18 @@ and volume, and filter it with a slower condition (a window of a day or more) so
 favourable conditions. Exit on a rule or after a fixed number of hours, never more than 24.""",
 }
 FAMILIES = ["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
+# Strategy families from published research (seeds.txt), one offered on each explore turn. pilot10 showed the model alone
+# runs out of distinct ideas at about 320; seeding gives explore turns mechanisms it would not reach for by itself.
+SEEDS = [dict(zip(("id", "style", "name", "mechanism", "sources"), (f.strip() for f in line.split("|"))))
+         for line in (Path(__file__).parent / "seeds.txt").read_text(encoding="utf-8").splitlines()
+         if line.strip() and not line.startswith("#")]
 
 
 class Hypothesis(BaseModel):
     family: Literal["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
     hypothesis: str = Field(min_length=20, max_length=450)  # the server's grammar enforces this, cutting a longer idea off
     parent_id: int | None = None
+    seed: SkipJsonSchema[str | None] = None  # set by code, never by the model: the seed id an explore turn offered
 
 
 def chat(role, system, user, schema=None, temperature=0.8):
@@ -332,12 +341,20 @@ def style_for(run_id, style):
     return ("long", "day")[store.count("run_id = ? AND tries = 0", [run_id]) // 2 % 2]
 
 
-def _explore(run_id, family, island=None):
+def _seed(kind, but=None):
+    """A random seed for this holding style other than `but`. Random, not least-used: a seed the model cannot get
+    past the near-copy check would stay least-used and be offered on every explore turn."""
+    return random.choice([s for s in SEEDS if s["style"] in (kind, "both") and s is not but])
+
+
+def _explore(run_id, seed, island=None):
     where, params, _ = scope(run_id, island)
     seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
-                       f"WHERE {where} AND family = ? AND tries = 0 ORDER BY id DESC LIMIT 12", params + [family])
-    ask = f"Propose an idea in the least-tried family: {family}."
-    if seen:  # shown with their results, so it can see what heavy trading did to this family's earlier ideas
+                       f"WHERE {where} AND seed = ? AND tries = 0 ORDER BY id DESC LIMIT 12", params + [seed["id"]])
+    ask = (f"Propose an idea built on this mechanism from published research. {seed['name']}: {seed['mechanism']} "
+           f"(Sources: {seed['sources']}.) Choose the indicators, windows, thresholds and exit yourself, to suit the "
+           "holding style above.")
+    if seen:  # shown with their results, so it can see what heavy trading did to this seed's earlier ideas
         closed = _closed(run_id, island)
         ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
                 + "\n".join(_line(r, closed=closed) for r in seen))
@@ -348,8 +365,8 @@ def propose(run_id, llm=chat, style="long", kind=None):
     """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer.
 
     Code turns away a proposal that only re-tunes an earlier rule, extends a used-up line or swaps a filter
-    on a crowded rule, and asks again. After three refusals the turn becomes an exploration of the
-    least-tried family the model has not just proposed in. If that is refused twice as well, the turn is
+    on a crowded rule, and asks again. After three refusals the turn becomes an exploration of
+    another research seed. If that is refused twice as well, the turn is
     skipped and None returned: nothing is run or logged, so it is not a trial. (Accepting after three
     refusals let pilot6 put 56 of its first 113 ideas into one moving-average crossover; accepting after
     five let 168 of pilot7's 330 long-hold ideas through, 116 of them into one rule.)
@@ -359,14 +376,13 @@ def propose(run_id, llm=chat, style="long", kind=None):
     system = RESEARCHER.replace("{holding}", HOLDING[kind])
     where, params, _ = scope(run_id, island)
     turn = store.count(f"{where} AND tries = 0", params)
-    tried = {r["family"]: r["n"] for r in store.query(
-        f"SELECT family, count(*) AS n FROM attempts WHERE {where} GROUP BY family", params)}
-    least = sorted(FAMILIES, key=lambda f: tried.get(f, 0))
     rows, lessons = _round(run_id, island)
+    seed = None
     # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
     # variations of its single best trend strategy, which is hill-climbing on noise.
     if turn % 2 == 0:
-        ask = _explore(run_id, least[(turn // 2) % 2], island)  # least-tried, then second least-tried
+        seed = _seed(kind)
+        ask = _explore(run_id, seed, island)
     elif turn % 4 == 1 or not lessons:
         ask = ("Take one of the better attempts, or a failed idea, and change its mechanism: a different indicator, "
                "condition or exit. Changing only window lengths or thresholds is not accepted.")
@@ -377,7 +393,8 @@ def propose(run_id, llm=chat, style="long", kind=None):
     spent, h, reason = _spent(rows), None, None
     for k in range(5):
         if k == 3 and h is not None:  # three refusals: stop circling and explore somewhere else
-            ask, reason = _explore(run_id, next(f for f in least if f != h.family), island), None
+            seed = _seed(kind, but=seed)
+            ask, reason = _explore(run_id, seed, island), None
         user = summary(run_id, island) + "\n\n" + ask
         text = llm("researcher", system, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
                    schema=Hypothesis.model_json_schema())
@@ -389,6 +406,7 @@ def propose(run_id, llm=chat, style="long", kind=None):
             continue
         reason = _objection(h, rules, spent, skeletons)
         if not reason:
+            h.seed = seed and seed["id"]
             return h
     if h is None:
         raise error

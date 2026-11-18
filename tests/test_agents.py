@@ -37,7 +37,7 @@ def test_propose_validates_json_and_retries_once():
 
     h = agents.propose("r", llm)
     assert h.family == "trend" and h.parent_id is None and len(seen) == 2
-    assert "least-tried family" in seen[0]
+    assert "from published research" in seen[0] and h.seed in {x["id"] for x in agents.SEEDS}  # turn 0 explores a seed
 
 
 def _ok(score, trades, hypothesis="long above the 200h average", **extra):
@@ -102,18 +102,18 @@ def test_an_idea_that_only_changes_the_numbers_is_turned_away():
     stubborn = ("Enter when the close exceeds the 120-hour high and volume is 2.0 times its 12-hour mean.", None)
     llm, seen = _researcher(*[stubborn] * 5)
     assert agents.propose("r", llm) is None and len(seen) == 5  # after five asks the turn is skipped, never accepted
-    assert "least-tried family" in seen[3] and "not accepted" not in seen[3]  # the fourth ask explores elsewhere, afresh
+    assert "from published research" in seen[3] and "not accepted" not in seen[3]  # the fourth ask explores elsewhere, afresh
 
 
-def test_after_three_refusals_the_turn_explores_another_family():
+def test_after_three_refusals_the_turn_explores_another_seed():
     _ok(1.2, 58, "Enter when the close exceeds the 480-hour high and volume is 1.3 times its 24-hour mean.")
     _ok(1.1, 79, "Enter when the close exceeds the 360-hour high and volume is 1.5 times its 48-hour mean.")
     again = ("Enter when the close exceeds the 240-hour high and volume is 1.4 times its 24-hour mean.", None)
     fresh = ("Enter when the 24-hour rolling mean of quote_volume crosses above its 168-hour mean. Exit when it falls below.", None)
     llm, seen = _researcher(again, again, again, fresh)
     assert agents.propose("r", llm).hypothesis == fresh[0] and len(seen) == 4
-    family = seen[3].split("least-tried family: ")[1].split(".")[0]
-    assert family != "trend"  # never the family it was just stuck in
+    name = lambda ask: ask.split("from published research. ")[1].split(":")[0]
+    assert name(seen[3]) != name(seen[0])  # never the seed it was just stuck on
 
 
 def test_style_sets_the_holding_paragraph_and_both_alternates_two_at_a_time():
@@ -134,14 +134,27 @@ def test_style_sets_the_holding_paragraph_and_both_alternates_two_at_a_time():
     assert kinds == ["long", "long", "day", "day", "long", "long"]
 
 
-def test_explore_turns_show_what_the_family_already_scored():
-    _ok(-3.5, 2251, "Enter between hours 8 and 12 when the 1-hour return is positive")
-    others = [f for f in agents.FAMILIES if f != "trend"]
-    for i in range(15):  # every other family has been tried more, and 16 ideas make this an explore turn
-        store.add({"run_id": "r", "tries": 0, "family": others[i % 6], "hypothesis": f"filler idea {i}", "status": "crash", "error": "boom"})
+def test_explore_turns_offer_a_seed_and_show_what_it_already_scored(monkeypatch):
+    _ok(-3.5, 2251, "Enter between hours 8 and 12 when the 1-hour return is positive", seed="tsmom")
+    _ok(0.2, 90, "something from another seed", seed="obv")
+    monkeypatch.setattr(agents.random, "choice", lambda pool: next(x for x in pool if x["id"] == "tsmom"))
     llm, seen = _researcher(("Hold while the 168-hour mean of close is above the 720-hour mean", None))
-    agents.propose("r", llm)
-    assert "least-tried family: trend" in seen[0] and "timing Sharpe -3.50, 2251 trades" in seen[0].split("already tried:")[1]
+    h = agents.propose("r", llm)  # two ideas so far: an explore turn
+    assert "Time-series momentum:" in seen[0] and "Moskowitz" in seen[0] and h.seed == "tsmom"
+    tried = seen[0].split("already tried:")[1]
+    assert "timing Sharpe -3.50, 2251 trades" in tried and "another seed" not in tried
+    assert "seed" not in agents.Hypothesis.model_json_schema()["properties"]  # the model never fills it in
+    _ok(0.1, 50, h.hypothesis, seed=h.seed)
+    llm, seen = _researcher(("Hold while volume is above its 48-hour mean and close above the 24-hour mean", None))
+    assert agents.propose("r", llm).seed is None  # turn 3 refines: no seed offered
+
+
+def test_seeds_are_complete_and_cover_both_styles():
+    assert {s["style"] for s in agents.SEEDS} == {"long", "day", "both"}
+    assert all(len(s) == 5 and all(s.values()) for s in agents.SEEDS)
+    assert len({s["id"] for s in agents.SEEDS}) == len(agents.SEEDS)
+    for kind in ("long", "day"):
+        assert len([s for s in agents.SEEDS if s["style"] in (kind, "both")]) >= 10
 
 
 def test_review_passes_on_only_the_previous_next_steps():
