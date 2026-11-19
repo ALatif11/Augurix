@@ -149,6 +149,31 @@ def test_explore_turns_offer_a_seed_and_show_what_it_already_scored(monkeypatch)
     assert agents.propose("r", llm).seed is None  # turn 3 refines: no seed offered
 
 
+def test_explore_turns_ask_for_five_ideas_and_take_the_least_likely_that_avoids_overused_conditions():
+    # gen-v1 stopped at 661: every seed came back as the same few conditions (v13)
+    for f in ["volume rises above its 24-hour mean", "the range is shrinking", "volatility is rising"]:
+        _ok(0.5, 100, f"Enter when the close exceeds the maximum high of the previous 336-hour period and {f}. "
+                      f"Exit when the close falls below the {len(f)}-hour minimum of the low and {f}.")
+    _ok(0.1, 50, "Enter when the 24-hour mean of volume crosses above its 168-hour mean. Exit when it falls back below.")
+    overused = "Enter when the close exceeds the maximum high of the previous 72-hour period and skewness is negative. Exit after 48 hours."
+    fresh = "Enter when the {w}-hour skewness of returns is below its 336-hour mean and trades rise. Exit when the skewness turns positive."
+    reply = agents.Ideas(ideas=[agents.Idea(family="other", hypothesis=h, probability=p) for h, p in
+                                [(overused, 0.02), (fresh.format(w=24), 0.3), (fresh.format(w=48), 0.1),
+                                 ("Enter when the obv rises faster than its 168-hour mean. Exit when it stops rising.", 0.4),
+                                 ("Enter when the 12-hour range is below its 336-hour mean. Exit after 24 hours of holding.", 0.2)]])
+    seen, schemas = [], []
+
+    def llm(role, system, user, schema=None, temperature=0.8):
+        seen.append(user), schemas.append(schema)
+        return reply.model_dump_json()
+
+    h = agents.propose("r", llm)  # four ideas so far: an explore turn
+    assert h.hypothesis == fresh.format(w=48) and h.seed and h.parent_id is None  # least likely of those that avoid it
+    assert "ideas" in schemas[0]["properties"] and "Propose 5 clearly different ideas" in seen[0]
+    assert "Use none of them" in seen[0] and "close exceeds maximum high previous hour period" in seen[0]
+    assert agents._overused(["Enter when A is up and B rises. Exit when C."] * 2) == []  # used twice is not overused
+
+
 def test_seeds_are_complete_and_cover_both_styles():
     assert {s["style"] for s in agents.SEEDS} == {"long", "day", "both"}
     assert all(len(s) == 5 and all(s.values()) for s in agents.SEEDS)

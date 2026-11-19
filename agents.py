@@ -22,7 +22,8 @@ import store
 
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")  # llama-server in WSL; any OpenAI-compatible server works
 MODEL = os.environ.get("LLM_MODEL", "gemma-4-12B-it-Q4_K_M")  # a label for the log; llama-server serves whatever it loaded
-PROMPT_VERSION = "v12"  # v10 is tag gen-v1 (attempts #2991-#3281 of run gen-v1); v11 added rests; v12 seeds explore turns
+PROMPT_VERSION = "v13"  # v10 is tag gen-v1 (#2991-#3281 of run gen-v1); v11 added rests; v12 seeds explore turns (tag
+                        # gen-v1.1, #4177-#4546); v13 asks explore turns for five ideas and names overused conditions
 MAX_TOKENS = 1500  # a strategy is ~150 tokens; without a cap the model can ramble until the call times out
 MEMORY = 200  # attempts before the researcher starts again with an empty memory. In night1 the ideas only got
               # worse after the first 200, as it kept refining its own refinements.
@@ -34,6 +35,10 @@ MAX_SAME_SKELETON = 3  # ideas allowed to share an exit condition and an entry c
                        # the short plain-language ideas v5 asks for all share one sentence template.
 MAX_SAME_RULE = 2  # ideas allowed to share one wording once the numbers are removed: an idea and one re-tuning of it.
                    # pilot4 proposed one breakout rule with volume multipliers of 1.3, 1.5 and 1.4.
+OVERUSED = 8  # most used conditions an explore turn is told to avoid (Frequent Subtree Avoidance, Shi, Duan & Li 2026).
+              # gen-v1 stopped at 661 with every seed turned into the same few conditions (a 336-hour high, a volume mean).
+IDEAS = 5  # ideas an explore turn asks for, with the probability the model gives each (Verbalized Sampling, Zhang et al.
+           # 2026): least likely first, so one call gets five chances at the near-copy check instead of one.
 STYLES = ("long", "day", "both")  # how long positions are held; "both" alternates idea by idea
 HOLDING = {
     "long": """Every position change costs 0.1%, and the history is about 35,000 hourly bars. Aim for fewer than
@@ -56,11 +61,34 @@ SEEDS = [dict(zip(("id", "style", "name", "mechanism", "sources"), (f.strip() fo
          if line.strip() and not line.startswith("#")]
 
 
+Family = Literal["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
+
+
 class Hypothesis(BaseModel):
-    family: Literal["trend", "mean_reversion", "breakout", "volatility", "volume", "time_of_day", "other"]
+    family: Family
     hypothesis: str = Field(min_length=20, max_length=450)  # the server's grammar enforces this, cutting a longer idea off
     parent_id: int | None = None
     seed: SkipJsonSchema[str | None] = None  # set by code, never by the model: the seed id an explore turn offered
+
+
+class Idea(BaseModel):
+    family: Family
+    hypothesis: str = Field(min_length=20, max_length=450)
+    probability: float  # no bounds in the schema: only sorted, never used as a number
+
+
+class Ideas(BaseModel):  # an explore turn's reply
+    ideas: list[Idea] = Field(min_length=IDEAS, max_length=IDEAS)
+
+
+def _parse(text):
+    """The proposals in a reply: an explore turn's ideas, least likely first, or the single idea of any other turn."""
+    match = re.search(r"\{.*\}", text, re.DOTALL)  # tolerate a fence or stray words around the JSON
+    raw = match.group(0) if match else text
+    if '"ideas"' not in raw:
+        return [Hypothesis.model_validate_json(raw)]
+    ideas = sorted(Ideas.model_validate_json(raw).ideas, key=lambda i: i.probability)
+    return [Hypothesis(family=i.family, hypothesis=i.hypothesis) for i in ideas]
 
 
 def chat(role, system, user, schema=None, temperature=0.8):
@@ -144,7 +172,7 @@ scores nothing; only being in the market at better times than average scores.
 
 {holding}
 
-You will be shown what has been tried so far. Propose ONE new idea, stated precisely enough to
+You will be shown what has been tried so far. Propose ONE new idea (or several, when asked), stated precisely enough to
 implement: the indicators, the window lengths in hours, and the entry and exit rules. Do not
 mention specific dates, events or price levels.
 
@@ -155,7 +183,7 @@ not a new idea, and neither is an earlier idea with different window lengths or 
 an earlier idea's exit and one of its entry conditions and swapping only the other condition is
 not a new idea either.
 
-Reply with JSON only:
+Unless asked for several ideas, reply with JSON only:
 {"family": one of """ + json.dumps(FAMILIES) + """, "hypothesis": "<the idea>", "parent_id": <id of the attempt you are refining, or null>}"""
 
 
@@ -228,6 +256,18 @@ def _skeleton(text):
     entry = re.sub(r"^\W*(enter|go|buy)(\s+long)?\s+(when|if)\s+", "", entry.strip())
     conditions = {_rule(c) for c in re.split(r"\band\b|,|;", entry)}
     return frozenset(c for c in conditions if len(c.split()) >= 3), _rule(re.sub(r"^(when|if)\s+", "", exit_.strip()).split(".")[0])
+
+
+def _pieces(text):
+    """An idea's conditions, entry and exit, numbers removed."""
+    entry, exit_ = _skeleton(text)
+    return entry | ({exit_} - {""})
+
+
+def _overused(earlier):
+    """The OVERUSED conditions most used by these ideas, each used at least MAX_SAME_SKELETON times."""
+    counts = Counter(p for text in earlier for p in _pieces(text))
+    return [p for p, n in counts.most_common(OVERUSED) if n >= MAX_SAME_SKELETON]
 
 
 def _objection(h, rules, spent, skeletons=()):
@@ -347,25 +387,31 @@ def _seed(kind, but=None):
     return random.choice([s for s in SEEDS if s["style"] in (kind, "both") and s is not but])
 
 
-def _explore(run_id, seed, island=None):
+def _explore(run_id, seed, island=None, avoid=()):
     where, params, _ = scope(run_id, island)
     seen = store.query("SELECT id, family, hypothesis, status, error, timing_sharpe, trades_per_symbol FROM attempts "
                        f"WHERE {where} AND seed = ? AND tries = 0 ORDER BY id DESC LIMIT 12", params + [seed["id"]])
-    ask = (f"Propose an idea built on this mechanism from published research. {seed['name']}: {seed['mechanism']} "
-           f"(Sources: {seed['sources']}.) Choose the indicators, windows, thresholds and exit yourself, to suit the "
-           "holding style above.")
+    ask = (f"Propose {IDEAS} clearly different ideas built on this mechanism from published research. {seed['name']}: "
+           f"{seed['mechanism']} (Sources: {seed['sources']}.) Choose the indicators, windows, thresholds and exit yourself, "
+           "to suit the holding style above.")
     if seen:  # shown with their results, so it can see what heavy trading did to this seed's earlier ideas
         closed = _closed(run_id, island)
-        ask += (" It must differ in mechanism, not only in window lengths, from these already tried:\n"
+        ask += (" They must differ in mechanism, not only in window lengths, from these already tried:\n"
                 + "\n".join(_line(r, closed=closed) for r in seen))
-    return ask
+    if avoid:
+        ask += ("\n\nEarlier ideas have used these conditions most (numbers removed, so any window counts). Use none of them, "
+                "as entry or exit:\n" + "\n".join(f"  - {p}" for p in avoid))
+    return ask + (f"\n\nGive each idea the probability (0 to 1) that you would have proposed it, and include unusual ideas "
+                  'with low probabilities. Reply with JSON only: {"ideas": [{"family": one of ' + json.dumps(FAMILIES)
+                  + ', "hypothesis": "<the idea>", "probability": <0 to 1>}, ...]}' + f" with exactly {IDEAS} ideas.")
 
 
 def propose(run_id, llm=chat, style="long", kind=None):
     """Ask the researcher for the next idea, alternating exploration with refining or following the reviewer.
 
     Code turns away a proposal that only re-tunes an earlier rule, extends a used-up line or swaps a filter
-    on a crowded rule, and asks again. After three refusals the turn becomes an exploration of
+    on a crowded rule, and asks again. An explore turn gets IDEAS ideas per ask and takes the least likely one that
+    stands, trying last any that uses an overused condition. After three refused asks the turn becomes an exploration of
     another research seed. If that is refused twice as well, the turn is
     skipped and None returned: nothing is run or logged, so it is not a trial. (Accepting after three
     refusals let pilot6 put 56 of its first 113 ideas into one moving-average crossover; accepting after
@@ -377,37 +423,40 @@ def propose(run_id, llm=chat, style="long", kind=None):
     where, params, _ = scope(run_id, island)
     turn = store.count(f"{where} AND tries = 0", params)
     rows, lessons = _round(run_id, island)
+    earlier = [r["hypothesis"] for r in store.query(f"SELECT hypothesis FROM attempts WHERE {where} AND tries = 0", params)]
+    rules, skeletons, avoid = Counter(map(_rule, earlier)), [_skeleton(t) for t in earlier], _overused(earlier)
     seed = None
     # Half the turns explore. With one turn in three, the first night run put 21 of 30 ideas into
     # variations of its single best trend strategy, which is hill-climbing on noise.
     if turn % 2 == 0:
         seed = _seed(kind)
-        ask = _explore(run_id, seed, island)
+        ask = _explore(run_id, seed, island, avoid)
     elif turn % 4 == 1 or not lessons:
         ask = ("Take one of the better attempts, or a failed idea, and change its mechanism: a different indicator, "
                "condition or exit. Changing only window lengths or thresholds is not accepted.")
     else:
         ask = "Follow one of the next steps suggested in the most recent lessons, stated as a precise new idea."
-    earlier = [r["hypothesis"] for r in store.query(f"SELECT hypothesis FROM attempts WHERE {where} AND tries = 0", params)]
-    rules, skeletons = Counter(map(_rule, earlier)), [_skeleton(t) for t in earlier]
     spent, h, reason = _spent(rows), None, None
     for k in range(5):
         if k == 3 and h is not None:  # three refusals: stop circling and explore somewhere else
             seed = _seed(kind, but=seed)
-            ask, reason = _explore(run_id, seed, island), None
+            ask, reason = _explore(run_id, seed, island, avoid), None
         user = summary(run_id, island) + "\n\n" + ask
         text = llm("researcher", system, user + (f"\n\nYour last proposal was not accepted: {reason}" if reason else ""),
-                   schema=Hypothesis.model_json_schema())
+                   schema=(Ideas if seed else Hypothesis).model_json_schema())
         try:
-            match = re.search(r"\{.*\}", text, re.DOTALL)  # tolerate a fence or stray words around the JSON
-            h = Hypothesis.model_validate_json(match.group(0) if match else text)
+            proposals = _parse(text)
         except ValidationError as e:
             error, reason = e, "it was not valid JSON in the required form."
             continue
-        reason = _objection(h, rules, spent, skeletons)
-        if not reason:
-            h.seed = seed and seed["id"]
-            return h
+        # an idea using an overused condition anyway is tried last; the stable sort keeps least likely first otherwise
+        objections = []
+        for h in sorted(proposals, key=lambda p: bool(_pieces(p.hypothesis) & set(avoid))):
+            objections.append(_objection(h, rules, spent, skeletons))
+            if not objections[-1]:
+                h.seed = seed and seed["id"]
+                return h
+        reason = objections[0]
     if h is None:
         raise error
     return None
