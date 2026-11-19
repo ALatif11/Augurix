@@ -396,7 +396,7 @@ Locks that enforce the order:
 - It writes `results/HOLDOUT_OPENED.json` before computing anything and refuses forever after.
 - An empty shortlist means the holdout is never opened and the result is zero survivors.
 
-`--option A` on `run_validation.py` selects the strict deflated-Sharpe gate; the default is B. Adam still has to confirm the choice before running it. Do not run it both ways and pick.
+`--option A` on `run_validation.py` selects the strict deflated-Sharpe gate; the default is B, which Adam chose on 2026-11-17 (see "Decision for Adam"). Do not run it both ways and pick.
 
 The original step list, for reference:
 
