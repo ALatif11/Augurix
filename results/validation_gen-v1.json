@@ -1,0 +1,91 @@
+{
+ "run_id": "gen-v1",
+ "pass_no": 1,
+ "option": "B",
+ "seed": 0,
+ "ran_at": "2026-11-20T09:32:40+00:00",
+ "window": [
+  "2023-01-01 00:00:00+00:00",
+  "2024-12-31 23:00:00+00:00"
+ ],
+ "n_trials": 534,
+ "candidates": 266,
+ "validated": 266,
+ "rejected_on_longer_data": 0,
+ "trial_variance_per_bar": 5.700279313686371e-05,
+ "expected_best_sharpe_from_luck": 2.170984304968936,
+ "real_pass_rate": 0.04887218045112782,
+ "null_pass_rate": 0.012781954887218045,
+ "shortlist": [
+  {
+   "attempt_id": 4461,
+   "code_sha": "6af35a8199be0c3f431bbc8571cfdc75d6468d86d90f95db9a6d7db2af366ddb",
+   "timing_sharpe": 1.8180252752294006,
+   "psr0": 0.998458074118759,
+   "dsr": 0.2828073510453164
+  },
+  {
+   "attempt_id": 4453,
+   "code_sha": "1889eec26db46f9e7f51f5820b060b12814356a9f5f126aa74c8dc559d348ee6",
+   "timing_sharpe": 1.6388402417253631,
+   "psr0": 0.9954207167318473,
+   "dsr": 0.19871681341816802
+  },
+  {
+   "attempt_id": 4377,
+   "code_sha": "bdcffda541d517a5083a35f5fd43e806472d749705f0b26766c2427718ade4ff",
+   "timing_sharpe": 1.548662753637481,
+   "psr0": 0.9942167479052826,
+   "dsr": 0.15512493885199158
+  },
+  {
+   "attempt_id": 4311,
+   "code_sha": "6dd96991a7df7fe3b652820f4bb700f0efcec1d0329abbb2494158541503b08e",
+   "timing_sharpe": 1.5074412414422471,
+   "psr0": 0.9915748453164293,
+   "dsr": 0.14639799034628598
+  },
+  {
+   "attempt_id": 4351,
+   "code_sha": "64670e3a2b26508c262e35fea0293e45684261ed6ead09461972846c46fae923",
+   "timing_sharpe": 1.4234895692475926,
+   "psr0": 0.9858780915512377,
+   "dsr": 0.12465244517226165
+  },
+  {
+   "attempt_id": 4260,
+   "code_sha": "56b6743420e45c3492c3c0f40130da1521a7dbcb09e88698d26cc4120b20b8b5",
+   "timing_sharpe": 1.323408577614175,
+   "psr0": 0.9690117973166708,
+   "dsr": 0.11597020303717062
+  },
+  {
+   "attempt_id": 4504,
+   "code_sha": "66ac856421e6491220aca935b366f49d2f486c7c7e3e4d3d4eac6b8a8805a65d",
+   "timing_sharpe": 1.322674747492326,
+   "psr0": 0.9713174718827746,
+   "dsr": 0.11143819019730289
+  },
+  {
+   "attempt_id": 4350,
+   "code_sha": "3905f7c45926eab2d6ee96f39f5db3aebca56021f35304ed32ad9b9ca26cb728",
+   "timing_sharpe": 1.3104318329577767,
+   "psr0": 0.9691166287184213,
+   "dsr": 0.10997106281287305
+  },
+  {
+   "attempt_id": 4341,
+   "code_sha": "44c25dc20c0be534c1334609d31ea72e458bc968db5073fae93b2fe7baa864cd",
+   "timing_sharpe": 1.2986339891503804,
+   "psr0": 0.9752493684522489,
+   "dsr": 0.09350545787229901
+  },
+  {
+   "attempt_id": 4323,
+   "code_sha": "7d17289979ca3ddc76b0727201bf35e3a346398f519b6137adf0f2ad81be4fd4",
+   "timing_sharpe": 1.2509506469931828,
+   "psr0": 0.9638109084858424,
+   "dsr": 0.09317766079544301
+  }
+ ]
+}
