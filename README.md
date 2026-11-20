@@ -4,7 +4,9 @@ A local AI proposes trading strategies and writes them as code. Plain Python dec
 
 Most "AI trading" projects show a good backtest. This one is built to find out whether a good backtest means anything. A language model running on one consumer GPU generates hundreds of strategies for Bitcoin and Ethereum; each one is sandboxed, checked for cheating, scored after fees, and corrected for the number of ideas tried. The deliverable is a **survival funnel**: how many strategies were generated, and how many survived each check, ending with one test on market data the model could not have seen. Zero survivors is an acceptable result.
 
-> **Status:** the pipeline, judge and statistics are built and tested. Pilot runs are tuning the agents. The official run, validation and the one-shot holdout test have not happened yet, so there is no headline result. Every number below is from pilots, in-sample, and is not evidence that any strategy works.
+> **Status (2026-11-20):** the official run (`gen-v1`, 661 attempts) is finished and frozen. Validation has run once and shortlisted 10 strategies, and the holdout test is pre-registered and tagged `prereg-v1`. The one-shot holdout test has not been opened yet, so there is no headline result. Every number below is in-sample and is not evidence that any strategy works.
+
+![The Strategies view of the dashboard on the official run](docs/screenshots/strategies.png)
 
 ## How it works
 
@@ -55,6 +57,12 @@ In-sample, on discovery data only:
 - **Reviewer notes:** the reviewer agent's working notes.
 
 It shows discovery data only and never fetches live prices, because current prices are holdout data.
+
+![The Funnel view: how many of the official run's 661 attempts survived each check](docs/screenshots/funnel.png)
+
+![The Reviewer notes view: the reviewer agent's working notes for each holding style](docs/screenshots/notes.png)
+
+`?run=NAME` in the address opens a given run, for example http://127.0.0.1:8000/?run=gen-v1#funnel.
 
 ## Running it
 

@@ -533,7 +533,7 @@ function funnelTab(d) {
     ["Passed the look-ahead test", det ? f.lookahead_ok : null, "detector not built"],
     ["Scored above zero", det ? f.gate_checked : f.gate_all],
     ["Validation shortlist", w.shortlisted, "locked until generation is frozen and finished"],
-    ["Survived the holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened: see results/" : "locked: data not downloaded"],
+    ["Survived the holdout", w.holdout ? w.holdout.survivors : null, d.locks.holdout_opened ? "opened: see results/" : "locked: not opened yet"],
   ];
   meter("funnel", stages.map(([label, count, why]) => count == null ? [label, null, why, why]
     : [label, N ? count / N : 0, h("span", {}, count.toLocaleString(), " ", h("small", {}, N ? pct(count / N) : "")), `${label}: ${count} of ${N}`]));
@@ -1161,7 +1161,7 @@ async function refresh() {
     let run = $("run").value;
     if (firstLoad || !run) {
       const runs = (await (await fetch("/api/state?run=")).json()).runs;  // the newest run opens first
-      if (!run) run = (runs.find(r => r.run_id !== "baselines") || runs[0] || {}).run_id || "";
+      if (!run) run = new URLSearchParams(location.search).get("run") || (runs.find(r => r.run_id !== "baselines") || runs[0] || {}).run_id || "";
     }
     const d = await (await fetch("/api/state?run=" + encodeURIComponent(run))).json();
     $("run").replaceChildren(...d.runs.map(r => h("option", {value: r.run_id}, `${r.run_id} (${r.n}${r.pilot ? ", pilot" : ""})`)));
