@@ -4,9 +4,30 @@ A local AI proposes trading strategies and writes them as code. Plain Python dec
 
 Most "AI trading" projects show a good backtest. This one is built to find out whether a good backtest means anything. A language model running on one consumer GPU generates hundreds of strategies for Bitcoin and Ethereum; each one is sandboxed, checked for cheating, scored after fees, and corrected for the number of ideas tried. The deliverable is a **survival funnel**: how many strategies were generated, and how many survived each check, ending with one test on market data the model could not have seen. Zero survivors is an acceptable result.
 
-> **Status (2026-11-20):** the official run (`gen-v1`, 661 attempts) is finished and frozen. Validation has run once and shortlisted 10 strategies, and the holdout test is pre-registered and tagged `prereg-v1`. The one-shot holdout test has not been opened yet, so there is no headline result. Every number below is in-sample and is not evidence that any strategy works.
+> **Status (2026-11-22):** done. The official run, the single validation pass and the one-shot holdout test have all happened. **The pre-registered headline test failed;** one of ten shortlisted strategies passed its own stricter test, by a hair. Details below.
 
 ![The Strategies view of the dashboard on the official run](docs/screenshots/strategies.png)
+
+## Result
+
+The survival funnel of the official run `gen-v1`, as pre-registered in [`PREREGISTRATION.md`](PREREGISTRATION.md) (tag `prereg-v1`, pushed before any holdout data was downloaded):
+
+| Stage | Left |
+|---|---|
+| Generated | 661 |
+| Passed the static check | 631 |
+| Ran in the sandbox | 603 |
+| Passed the look-ahead test | 594 |
+| Timing Sharpe above 0 on discovery (2019–2022) | 266 |
+| Individually significant on validation (2023–2024) | 13 |
+| Shortlisted (top 10) | 10 |
+| **Survived the holdout (Mar 2025 – Oct 2026)** | **1** |
+
+- **Headline test, failed.** The equal-weight portfolio of the ten had a holdout timing Sharpe of +0.47, with a probabilistic Sharpe ratio of 0.73 against the 0.95 required. At double the fee it was −0.18.
+- **Per-strategy test, one survivor.** #4323, a day-trade volatility breakout: buy when an hour's move exceeds three times the past week's typical move and the price is above the week's high, and sell 12 hours later. It scored a holdout timing Sharpe of +1.85, with a probabilistic Sharpe ratio of 0.9964 against a Bonferroni bar of 0.995. It is in the market about 4% of the time, and a few large moves carry the result.
+- **No deflated Sharpe on the validation shortlist passed:** the best was 0.28, against a luck bar of 2.17 for 534 trials.
+
+Read plainly: a 12B model running on one GPU produced one strategy that just cleared a pre-registered test on data it could not have seen, inside a portfolio test that failed. That is weak evidence. It is not a reason to trade. Seven of the ten shortlisted strategies were one "Monday breakout" idea, and all seven lost or went flat on the holdout. That pattern was noticed after the fact and is not itself a finding.
 
 ## How it works
 
@@ -37,7 +58,7 @@ All three agents are one local model (Gemma 4 12B, 4-bit, served by llama.cpp) w
 | Moving the goalposts after seeing results | `PREREGISTRATION.md` fixes the shortlist, the test and the thresholds, and is committed and tagged before the holdout data exists. `open_holdout.py` runs once, refuses if any judge file changed since the tag, and records that it ran before computing anything. |
 | Generated code harming the machine | It runs only in the locked-down container. |
 
-## What the pilots found so far
+## What the pilots found
 
 In-sample, on discovery data only:
 

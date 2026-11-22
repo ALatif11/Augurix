@@ -170,7 +170,8 @@ def week5(run=None):
             out["shortlisted"] = rows[0]["n"]
     except duckdb.CatalogException:  # validation has never been run
         pass
-    files = sorted((ROOT / "results").glob(f"holdout_{run or '*'}.json"))
+    # Windows globs ignore case, so "holdout_*" also matches HOLDOUT_OPENED.json, the lock file; keep only result files.
+    files = [f for f in sorted((ROOT / "results").glob(f"holdout_{run or '*'}.json")) if f.name.startswith("holdout_")]
     if files:
         r = json.loads(files[-1].read_text())
         out["holdout"] = {"survivors": r["survivors"], "primary_passed": r["primary"]["passed"]}

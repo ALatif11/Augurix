@@ -27,6 +27,17 @@ def test_state_and_attempt_are_json_safe(tmp_path, monkeypatch):
     assert one["attempt"]["equity"] == [1.0, 1.1] and dashboard.attempt(99) is None
 
 
+def test_week5_reads_the_holdout_result_and_not_the_lock_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "DB", tmp_path / "t.duckdb")
+    monkeypatch.setattr(dashboard, "ROOT", tmp_path)
+    (tmp_path / "results").mkdir()
+    (tmp_path / "results" / "HOLDOUT_OPENED.json").write_text(json.dumps({"run_id": "gen-v1"}))  # no survivors key
+    (tmp_path / "results" / "holdout_gen-v1.json").write_text(json.dumps({"survivors": 1, "primary": {"passed": False}}))
+    for run in (None, "gen-v1"):  # "gen" sorts before "OPENED" case-folded, as in the real results folder
+        assert dashboard.week5(run)["holdout"] == {"survivors": 1, "primary_passed": False}
+    assert dashboard.week5("other")["holdout"] is None
+
+
 def test_near_copies_share_a_group_and_retries_follow_their_idea(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DB", tmp_path / "t.duckdb")
     rule = "Enter when the close price is above the {w}-hour high and {f}. Exit when the close falls below the 168-hour rolling mean."

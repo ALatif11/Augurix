@@ -325,8 +325,8 @@ svg .lab { fill: var(--ink2); }
       </div>
       <div class="lock">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-        <div><h3>Validation, holdout and forward test: locked</h3>
-          <p>Everything here is measured on 2019–2022, a period the model has seen, so none of it is evidence that a strategy works. Validation runs once after the official run is finished; the holdout opens once after that (PLAN.md, Week 5). Current prices are holdout data, so this page never fetches them.</p></div>
+        <div><h3>Validation and holdout: each run once</h3>
+          <p>Everything else on this page is measured on 2019–2022, a period the model has seen, so none of it is evidence that a strategy works. Validation ran once after the official run was finished and the holdout opened once after that (PLAN.md, Week 5; results/ and PREREGISTRATION.md hold the numbers). Current prices are holdout data, so this page never fetches them.</p></div>
       </div>
     </section>
 
@@ -512,7 +512,9 @@ function title(d) {
   }
   const n = t.span.scored, best = f.best, luck = t.luck;
   const why = `${run ? run.run_id + (run.pilot ? ", a pilot" : ", the official run") : ""} · in-sample, 2019–2022 · only the holdout counts`;
-  const head = n < 2 || best == null ? "Too few backtests to say anything yet."
+  const ho = d.week5 && d.week5.holdout;  // set once open_holdout.py has run for this run
+  const head = ho ? `Holdout: the headline test ${ho.primary_passed ? "passed" : "failed"}; ${ho.survivors} of ${d.week5.shortlisted} survived alone.`
+             : n < 2 || best == null ? "Too few backtests to say anything yet."
              : best <= luck ? "Nothing here beats luck yet." : "One score is above luck. A reason to validate, not evidence.";
   $("verdict").replaceChildren(head, h("small", {}, why));
   const target = run && !run.pilot ? 1000 : null;
