@@ -85,22 +85,74 @@ It shows discovery data only and never fetches live prices, because current pric
 
 `?run=NAME` in the address opens a given run, for example http://127.0.0.1:8000/?run=gen-v1#funnel.
 
-## Running it
+## Rerunning it
 
-Requirements: Windows with WSL (Ubuntu), an NVIDIA GPU with about 10 GB free, Docker Desktop, Python 3.12 or later, and llama.cpp built in WSL with `gemma-4-12B-it-Q4_K_M.gguf`.
+There are two levels. Checking the published result needs no GPU. Running the experiment again needs the GPU, and it is a new experiment: the model is sampled, so a new run proposes different strategies.
+
+### Check the published result
+
+Requirements: Python 3.12 or later, and Docker Desktop for 12 of the tests.
 
 ```
+git clone https://github.com/ALatif11/Augurix && cd Augurix
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python download_data.py        (Binance bulk data, 2019-2024, checksums verified)
-.venv\Scripts\python make_splits.py
 docker build -t augurix-sandbox .
-.venv\Scripts\python -m pytest -q            (134 tests; 12 need Docker running)
-overnight.cmd pilot1 5 both                  (starts the model server, searches for 5 hours, stops it)
-.venv\Scripts\python dashboard.py
+.venv\Scripts\python -m pytest -q
 ```
 
-The Week 5 scripts (`run_validation.py`, `open_holdout.py`) run once, in a fixed order with locks described in `PLAN.md`. Do not run them to try things out.
+The tests use synthetic data only. They include the backtester's toy example and properties, the 14 planted look-ahead cheats, the deflated Sharpe ratio's reference cases and simulation, and the Week 5 locks.
+
+The official run is in `results/`:
+
+| File | What it holds |
+|---|---|
+| `gen-v1_attempts.parquet` | All 661 attempts of the official run: idea, code, status, scores on discovery, prompt version |
+| `gen-v1_validation.parquet` | The 266 strategies scored on validation, with the shortlist flag and each code's SHA-256 |
+| `validation_gen-v1.json` | The validation summary (N, luck bar, pass rates, shortlist) |
+| `holdout_gen-v1.json` | The holdout result |
+| `HOLDOUT_OPENED.json` | The lock: when the holdout was opened |
+| `data_manifest.json` | Every data file's checksum and download time |
+
+`tests/test_results.py` checks these files against each other: the funnel counts, N = 534, the holdout outcome, and that each shortlisted strategy's code hashes to the SHA-256 registered in `PREREGISTRATION.md`.
+
+`git log -1 prereg-v1` shows when the pre-registration was committed. `results/data_manifest.json` (a copy of `data/manifest.json`) records each data file's SHA-256 and when it was downloaded; the holdout months come after the tag.
+
+### Run the experiment again
+
+Also needed: Windows with WSL (Ubuntu), an NVIDIA GPU with about 10 GB free, and llama.cpp built with CUDA in WSL (`cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j`) at `~/llama.cpp`. Put a Q4_K_M GGUF of Gemma 4 12B instruct at `~/models/gemma-4-12B-it-Q4_K_M.gguf` (7.7 GB, from Hugging Face). A different model works through the `LLM_MODEL` and `LLAMA_ARGS` variables in `overnight.cmd`.
+
+The five commands, with Docker Desktop running:
+
+```
+.venv\Scripts\python download_data.py           (Binance bulk data, 2019-2024, checksums verified)
+.venv\Scripts\python make_splits.py             (discovery, validation; the holdout is not downloaded)
+overnight.cmd pilot1 2 both                     (a pilot: starts the model server, searches for 2 hours, stops it)
+overnight.cmd myrun 12 both --n 1000 --official (the official run; rerun the same command to resume)
+.venv\Scripts\python dashboard.py               (http://127.0.0.1:8000)
+```
+
+Each run writes `runs/NAME.log` and `runs/NAME_report.md`. Pilots never count toward N and can never reach validation.
+
+Validation and the holdout run once per experiment, in a fixed order, and the scripts enforce it. This repository's locks are already spent, so a replication needs its own: work in a fresh clone, delete `results/` and the local `prereg-v1` tag there (`git tag -d prereg-v1`), and never push that clone over this one. Then:
+
+1. `run_validation.py --run myrun`, once, after generation is final. It writes `PREREGISTRATION.md`.
+2. Commit `PREREGISTRATION.md`, tag it `prereg-v1`, and push, so the tag has an outside timestamp.
+3. `download_data.py --holdout --end YYYY-MM` (the last complete month). It refuses without the tag.
+4. `open_holdout.py --run myrun`, once. Whatever it prints is the result.
+
+### The bake-off
+
+`bakeoff.py` compares how well models drive the pipeline, on discovery-only pilot runs with the same server settings. The result is in [WRITEUP.md](WRITEUP.md#bake-off).
+
+```
+set LLAMA_ARGS=-c 8192 -fa on -ctk q8_0 -ctv q8_0
+set LLM_MODEL=Qwen3-14B-Q4_K_M
+overnight.cmd bake-qwen 3 both --n 100
+set LLM_MODEL=gemma-4-12B-it-Q4_K_M
+overnight.cmd bake-gemma 3 both --n 100
+.venv\Scripts\python bakeoff.py bake-qwen bake-gemma
+```
 
 ## Files
 
@@ -116,6 +168,8 @@ The Week 5 scripts (`run_validation.py`, `open_holdout.py`) run once, in a fixed
 | `baselines.py` | Hand-written reference strategies |
 | `download_data.py`, `make_splits.py` | Data and the time splits |
 | `run_validation.py`, `open_holdout.py` | Validation, pre-registration and the one-shot holdout test |
+| `bakeoff.py` | The bake-off table |
+| `WRITEUP.md` | The write-up: method, result, limitations |
 | `dashboard.py`, `dashboard.html` | The dashboard |
 | `PLAN.md` | Every decision and the reasoning behind it, the schedule and the specs |
 
