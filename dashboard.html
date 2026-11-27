@@ -326,7 +326,7 @@ svg .lab { fill: var(--ink2); }
       <div class="lock">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
         <div><h3>Validation and holdout: each run once</h3>
-          <p>Everything else on this page is measured on 2019–2022, a period the model has seen, so none of it is evidence that a strategy works. Validation ran once after the official run was finished and the holdout opened once after that (PLAN.md, Week 5; results/ and PREREGISTRATION.md hold the numbers). Current prices are holdout data, so this page never fetches them.</p></div>
+          <p>Everything else on this page is measured on 2019 to 2022, a period the model has seen, so none of it is evidence that a strategy works. Validation ran once after the official run was finished and the holdout opened once after that (PLAN.md, Week 5; results/ and PREREGISTRATION.md hold the numbers). Current prices are holdout data, so this page never fetches them.</p></div>
       </div>
     </section>
 
@@ -511,9 +511,11 @@ function title(d) {
     return;
   }
   const n = t.span.scored, best = f.best, luck = t.luck;
-  const why = `${run ? run.run_id + (run.pilot ? ", a pilot" : ", the official run") : ""} · in-sample, 2019–2022 · only the holdout counts`;
+  const who = run ? (run.pilot ? `Pilot run ${run.run_id}` : `The official run, ${run.run_id}`) : "This run";
   const ho = d.week5 && d.week5.holdout;  // set once open_holdout.py has run for this run
-  const head = ho ? `Holdout: the headline test ${ho.primary_passed ? "passed" : "failed"}; ${ho.survivors} of ${d.week5.shortlisted} survived alone.`
+  const why = ho ? `${who}: ${(f.generated || 0).toLocaleString()} strategies a local model wrote and plain Python judged, then one pre-registered test on the holdout. Every other score on this page is in-sample, 2019 to 2022.`
+                 : `${who}. Every score is in-sample, 2019 to 2022; only the holdout counts.`;
+  const head = ho ? `The headline test ${ho.primary_passed ? "passed" : "failed"}. ${ho.survivors} of ${d.week5.shortlisted} strategies survived alone.`
              : n < 2 || best == null ? "Too few backtests to say anything yet."
              : best <= luck ? "Nothing here beats luck yet." : "One score is above luck. A reason to validate, not evidence.";
   $("verdict").replaceChildren(head, h("small", {}, why));
@@ -718,8 +720,8 @@ function scatter(scored) {
     lastPt = [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height];
     const p = nearest(lastPt);
     if (!p || e.buttons) { tip.style.display = "none"; return; }
-    tip.replaceChildren(h("b", {}, `#${p.r.id} · ${plain(p.r.family)}`), h("br"),
-      h("span", {}, `timing ${signed(p.r.timing_sharpe)} · ${Math.round(p.r.trades_per_symbol)} trades · held ${held(p.r.hold_hours)}`),
+    tip.replaceChildren(h("b", {}, `#${p.r.id}, ${plain(p.r.family)}`), h("br"),
+      h("span", {}, `Timing ${signed(p.r.timing_sharpe)}, ${Math.round(p.r.trades_per_symbol)} trades, held ${held(p.r.hold_hours)}`),
       h("span", {class: "idea"}, (p.r.hypothesis || "").slice(0, 160)));
     const br = wrap.getBoundingClientRect(), px = e.clientX - br.left, py = e.clientY - br.top;
     tip.style.display = "block";
@@ -742,7 +744,7 @@ function refilter() {
   chips("fam", [...new Set(ROWS.map(r => r.family || "none"))].sort().map(f => [f, plain(f), ROWS.filter(r => (r.family || "none") === f && !r.tries).length]), F.fams);
   const kept = scored.filter(r => passes(r));
   const parts = [h("b", {}, kept.length.toLocaleString()), ` of ${scored.length.toLocaleString()} backtested pass`];
-  if (kept.length) parts.push(" · best ", h("b", {}, signed(Math.max(...kept.map(r => r.timing_sharpe)))), " · median ", h("b", {}, signed(median(kept.map(r => r.timing_sharpe)))));
+  if (kept.length) parts.push(". Best ", h("b", {}, signed(Math.max(...kept.map(r => r.timing_sharpe)))), ", median ", h("b", {}, signed(median(kept.map(r => r.timing_sharpe)))), ".");
   if (F.group != null) parts.push(h("br"), `only near-copies of #${F.group} `, on(h("button", {class: "link"}, "show all"), () => { F.group = null; refilter(); }));
   $("passing").replaceChildren(...parts);
   table();
@@ -781,7 +783,7 @@ function table() {
         e => { e.stopPropagation(); open.has(r.group) ? open.delete(r.group) : open.add(r.group); table(); }), h("span", {class: "n", title: `${size} near-copies`}, "×" + size)] : []),
         String(r.id), r.tries ? h("span", {class: "tag"}, ` retry ${r.tries}`) : ""),
       h("td", {class: "idea", title: r.hypothesis || ""}, h("span", {}, (r.hypothesis || "").replace(/^Enter (long )?when /i, "")),
-        h("em", {}, [plain(r.family), ISLAND[r.island]].filter(Boolean).join(" · "))),
+        h("em", {}, [plain(r.family), (ISLAND[r.island] || "").toLowerCase()].filter(Boolean).join(", "))),
       h("td", {}, chip(r.status)),
       h("td", {class: "r score", title: size > 1 && !member ? `median of the group: ${signed(median(members.filter(isScored).map(x => x.timing_sharpe)))}` : ""},
         h("div", {}, h("b", {class: luck != null && r.timing_sharpe > luck ? "beat" : ""}, signed(r.timing_sharpe)), ruler(r.timing_sharpe, luck))),
@@ -838,14 +840,14 @@ async function show(id) {
   const {attempt: a} = await res.json();
   const row = BYID.get(id) || a, luck = luckNow();
   const kids = [
-    h("div", {class: "who"}, h("h2", {}, `#${a.id} · ${plain(a.family)}`), chip(a.status)),
-    h("p", {class: "meta"}, [a.run_id + (a.pilot ? " (pilot)" : ""), ISLAND[row.island], "prompts " + (a.prompt_version || "–"), "look-ahead test: " + (a.lookahead || "not reached")].filter(Boolean).join(" · ")),
+    h("div", {class: "who"}, h("h2", {}, `#${a.id}, ${plain(a.family)}`), chip(a.status)),
+    h("p", {class: "meta"}, [a.run_id + (a.pilot ? " (pilot)" : ""), ISLAND[row.island], "prompts " + (a.prompt_version || "–"), "look-ahead test: " + (a.lookahead || "not reached")].filter(Boolean).join(", ")),
     h("p", {class: "idea-text"}, a.hypothesis || ""),
   ];
   if (a.timing_sharpe != null) {
     const beat = luck != null && a.timing_sharpe > luck;
     kids.push(h("div", {class: "bigscore"},
-      h("div", {class: "num"}, signed(a.timing_sharpe), h("small", {}, luck == null ? "timing Sharpe" : beat ? "above the luck benchmark" : "timing Sharpe, below luck")),
+      h("div", {class: "num"}, signed(a.timing_sharpe), h("small", {}, luck == null ? "timing Sharpe, in-sample" : beat ? "in-sample, above the discovery luck benchmark" : "in-sample, below the discovery luck benchmark")),
       ruler(a.timing_sharpe, luck, 360, true)));
   }
   if (a.error) kids.push(h("pre", {class: "err"}, a.error));
@@ -916,7 +918,7 @@ const replay = (() => {
     const cells = Object.fromEntries(["When", "Position", "Strategy", "Buy & hold", "Fees paid", "Trades"].map(k => [k, h("b", {}, "–")]));
     const log = h("ul", {class: "tradelog", "aria-live": "polite"});
     host.replaceChildren(h("h3", {}, "Replay its trades"),
-      h("p", {class: "sub", style: "margin:2px 0 0"}, `Every position change on the 2019–2022 hourly bars. ▲ bought, ▼ sold; the strip underneath is the position, 0 to 100% of the account. The dollars are a pretend ${usd(START)} on this coin alone, after the ${(D.fee ?? .001) * 100}% fee on every trade, against putting the same ${usd(START)} in and holding. In-sample, so not evidence. Space plays and pauses.`),
+      h("p", {class: "sub", style: "margin:2px 0 0"}, `Every position change on the 2019 to 2022 hourly bars. ▲ bought, ▼ sold; the strip underneath is the position, 0 to 100% of the account. The dollars are a pretend ${usd(START)} on this coin alone, after the ${(D.fee ?? .001) * 100}% fee on every trade, against putting the same ${usd(START)} in and holding. In-sample, so not evidence. Space plays and pauses.`),
       h("div", {class: "replay-bar"}, tabs, play, pace, scrub), stage,
       h("div", {class: "readout"}, ...Object.entries(cells).map(([k, v]) => h("div", {}, k, v))), log);
     stage.append(fx);
@@ -1079,10 +1081,10 @@ function lanes() {
         if (best == null || r.timing_sharpe > best) { best = r.timing_sharpe; path += `${path ? "H" + X(j).toFixed(1) + "V" : "M" + X(j).toFixed(1) + " "}${Y(best).toFixed(1)}`; }
         g.append(s("circle", {cx: X(j), cy: Y(r.timing_sharpe), r: beat ? 5 : 3.4, fill: "var(--hue)", opacity: beat ? 1 : .8,
                               stroke: beat ? "var(--ink)" : "none", "stroke-width": 1.5, class: fresh ? "fresh-dot" : ""},
-          s("title", {}, `#${r.id} · ${signed(r.timing_sharpe)} · ${(r.hypothesis || "").slice(0, 120)}`)));
+          s("title", {}, `#${r.id}, ${signed(r.timing_sharpe)}: ${(r.hypothesis || "").slice(0, 120)}`)));
       } else {
         g.append(s("rect", {x: X(j) - 1, y: strip, width: 2, height: 10, rx: 1, fill: `var(--${(OUTCOME[r.status] || [0, "muted"])[1]})`, opacity: .7, class: fresh ? "fresh-dot" : ""},
-          s("title", {}, `#${r.id} · ${outcome(r.status)}`)));
+          s("title", {}, `#${r.id}, ${outcome(r.status)}`)));
       }
       if (r.id === newest && !calm.matches)
         g.append(s("circle", {cx: X(j), cy: isScored(r) ? Y(r.timing_sharpe) : strip + 5, r: 5, fill: "none", stroke: "var(--hue)", "stroke-width": 1.5, class: "ping"}));
@@ -1095,7 +1097,7 @@ function lanes() {
     const scored = rs.filter(isScored);
     return h("div", {class: "lane"},
       h("div", {class: "head"}, h("h2", {}, ISLAND[k] || "All attempts"),
-        h("span", {}, `${rs.length} attempts · ${scored.length} backtested · median ${signed(median(scored.map(r => r.timing_sharpe)))}`)), g);
+        h("span", {}, `${rs.length} attempts, ${scored.length} backtested, median ${signed(median(scored.map(r => r.timing_sharpe)))}`)), g);
   });
   $("lanes").replaceChildren(...(out.length ? out : [h("p", {class: "empty"}, "No attempts logged yet.")]));
   for (const r of ROWS) seenLive.add(r.id);
@@ -1145,7 +1147,7 @@ function lessons(d) {
   if (!d.lessons.length) return $("lessons").replaceChildren(h("div", {class: "empty"}, "No reviews yet. The first comes after 20 attempts."));
   $("lessons").replaceChildren(...d.lessons.map(note => {
     const island = ISLAND[(note.run_id || "").split("/")[1]];
-    const box = h("div", {}, h("h3", {}, `${island ? island + " · " : ""}After attempt #${note.after_attempt}`));
+    const box = h("div", {}, h("h3", {}, `${island ? island + ", after" : "After"} attempt #${note.after_attempt}`));
     for (const line of note.text.split("\n")) {
       const cut = line.indexOf(":");
       if (cut < 0) continue;
